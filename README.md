@@ -77,7 +77,7 @@ Find a detailed list of expected executables in [setup_and_dependencies.md](setu
   ```
   tax_path_to_file="/my/system/new_taxdump"
   ```
-- ObiMAGIC scripts: download the [latest release](LINK_TO_LATEST_RELEASE) or use `git clone https://github.com/jromahn/ObiMAGIC.git`
+- ObiMAGIC scripts: download the [latest release](https://github.com/jromahn/ObiMAGIC/archive/refs/tags/v0.1.tar.gz) or use `git clone https://github.com/jromahn/ObiMAGIC.git`
 
 __Mandatory executable for pipeline path 2 only:__
 - [Cutadapt](https://cutadapt.readthedocs.io/en/stable/): `cutadapt`
