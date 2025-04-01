@@ -1,0 +1,46 @@
+__Mandatory executables:__
+- [Obitools](https://git.metabarcoding.org/obitools/obitools4/obitools4):
+  - `obi4_obiannotate`
+  - `obi4_obipairing`
+  - `obi4_obigrep`
+  - `obi4_obimultiplex`
+  - `obi4_obiuniq`
+  - `obi4_obicount`
+  - `obi4_obiannotate`
+  - `obi4_obiclean`
+  - `obi4_obipcr`
+  - `obi4_obirefidx`
+  - `obi4_obitag`
+  - `obi4_obidistribute`  
+- [bash](https://tiswww.case.edu/php/chet/bash/bashtop.html):
+  - `bash`
+- [Perl](https://www.perl.org/) and perl modules:
+  - `perl`
+  - `Cwd 'abs_path'`
+  - `File::Basename`
+  - `IO::Zlib`
+  - `IPC::Cmd qw[can_run run]`
+  - `List::MoreUtils qw(uniq)`
+- [R](https://cran.r-project.org/) and R libraries:
+  - `Rscript`
+  - `jsonify`
+  - `cowplot`
+  - `gapminder`
+  - `ggpmisc`
+  - `ggpubr`
+  - `ghibli`
+  - `magrittr`
+  - `plotly`
+  - `ROBIFastread`
+  - `seqinr`
+  - `taxize`
+  - `taxonomizr`
+  - `tidyverse`
+  - `treemapify`
+  - `vegan`
+- [pigz](https://zlib.net/pigz/):
+  - `pigz`
+
+__Mandatory executable for pipeline path 2 only:__
+- [Cutadapt](https://cutadapt.readthedocs.io/en/stable/):
+  - `cutadapt`
