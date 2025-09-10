@@ -8,7 +8,7 @@ use Text::Unidecode; # transform special letters into ascii friendly ncbi readab
 
 
 ###################################################
-# Pipeline written by Juliane Romahn ( email: romahnjuliane@gmail.com)
+# Pipeline written by Juliane Romahn 
 # version: 25.01.2024
 # aim: change PhyloAlps/ObiTools1 fasta databases to be compatible with ObiTool4 for obitag
 ##################

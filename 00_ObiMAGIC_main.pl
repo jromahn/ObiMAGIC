@@ -1,18 +1,27 @@
 #!/usr/bin/env perl
 
+########################################################################################################
+# ObiTools4 Script for Metabarcoding --> ObiMAGIC
+# Pipeline written by Tilman Schell  
+# version: "0.1" - 05.03.2025
+# version: "0.2" - 23.08.2025 by Juliane Romahn: remove few errors
+
 use strict;
 use warnings;
 use Cwd 'abs_path';
 use IPC::Cmd qw[can_run run];
 use File::Basename;
+use File::Find;
 use Scalar::Util qw(looks_like_number);
 
-#define variables
-my $version = "0.1";
+#define pipeline version
+my $version = "0.2"; # obimagic version
+
+#### #define variables
 my @orig_ngs = ();
 my $out_dir = abs_path("./");
 my @orig_fq = ();
-my $project = "";
+my $project = ""; ## later: #if not specified take project name from ngs file
 my $threads = 10;
 my $slurm = 0;
 my $no_slurm = 0;
@@ -38,6 +47,8 @@ chomp $new_taxdump_default;
 $new_taxdump_default =~ s/^tax_path_to_file="//;
 $new_taxdump_default =~ s/".*$//;
 my $new_taxdump = "";
+
+# list dependencies
 my @dependencies = (
 	#external dependencies
 	"Rscript",
@@ -54,6 +65,8 @@ my @dependencies = (
 	"obi4_obirefidx",
 	"obi4_obitag",
 	"obi4_obidistribute",
+	#"obi4_obitaxonomy",
+	#" obimatrix and obicsv ",
 	#ObiMAGIC main scripts
 	"00_ObiHelp_NGS_control.pl",
 	"00_ObiMAGIC_main.pl",
@@ -76,7 +89,7 @@ my @dependencies = (
 
 my $input_error = 0;
 
-#subroutines
+#subroutines (have to be here otherwise script is not working.... )
 sub print_help{
 	print STDOUT "\n";
 	print STDOUT "00_ObiMAGIC_main.pl v$version\n";
@@ -143,6 +156,7 @@ sub exe_cmd{
 		print STDERR "CMD\t$cmd\n";
 	}
 	if($dry == 0){
+		print $cmd, "\n";
 		system("$cmd") == 0 or die "ERROR\tsystem $cmd failed: $?";
 	}
 }
@@ -218,6 +232,7 @@ for (my $i = 0; $i < scalar(@ARGV);$i++){
 #print the original command
 print STDERR "CMD\t" . $0 . " " . join(" ",@ARGV) . "\n";
 
+############################################################## Testing starts here ############################################################
 #catch multiple input errors
 if(scalar(@orig_ngs) == 0){
 	print STDERR "ERROR\tSpecify -ngs at least once\n";
@@ -393,7 +408,10 @@ open (DBCONF,'<',$db_config) or die "Could not open $db_config for reading!\n";
 while (my $line = <DBCONF>){
 	chomp $line;
 	my ($primer,$db_path) = split(/\t/,$line);
-	$db_path = abs_path(dirname($0)) . "/$db_path";
+	#check if db_path is an absolute path otherwise make it one
+	if($db_path !~ /^/){
+		$db_path = abs_path(dirname($0)) . "/$db_path";
+	}
 	if(exists($db{$primer})){
 		print STDERR "WARNING\t$primer specified multiple times in $db_config. Using first mention only:\n";
 		print STDERR "WARNING\t$primer\t$db{$primer}\n";
@@ -401,6 +419,10 @@ while (my $line = <DBCONF>){
 	else{
 		if(-f $db_path){
 			$db{$primer} = $db_path;
+		}
+		else{
+			print STDERR "ERROR\t$db_path is not existing \n";
+			exit 1;
 		}
 	}
 }
@@ -465,7 +487,9 @@ foreach(@orig_fq){
 	}
 }
 
-#pre-process ngs file
+############################################################## Testing ends here ############################################################
+
+####### pre-process ngs file
 #if not specified take project name from ngs file
 if($project eq ""){
 	my $ngs_line = `head -n 2 $orig_ngs[0] | tail -n 1`;
@@ -481,7 +505,7 @@ else{
 }
 exe_cmd($cmd,$verbose,$dry);
 
-#concatenate or link fastq files
+######## concatenate or link fastq files
 my @forward;
 my @reverse;
 foreach(keys(%fq_filter)){
@@ -506,18 +530,19 @@ foreach(keys(%fq_filter)){
 	}
 }
 
-#create obiwitch config file according to pipeline path
+####### create obiwitch config file according to pipeline path
 $cmd = "00_ObiMAGIC_obiwitch_config.pl $obiwitch_config $project $out_dir/$project\_1.fq.gz $out_dir/$project\_2.fq.gz $out_dir/$project.ngs $threads $pipeline_path > $out_dir/$project\_obiwitch.ini";
 exe_cmd($cmd,$verbose,$dry);
 
-#run obiwitch
+################################ RUN ObiWITCH ################################
+####### run obiwitch
 $cmd = "01_ObiWitch_main.sh -obiwitch-config $out_dir/$project\_obiwitch.ini";
 if($slurm == 1){
 	$cmd = "sbatch --job-name=$project\_obiwitch $slurm_opts --wait --wrap=\"$cmd\"";
 }
 exe_cmd($cmd,$verbose,$dry);
 
-#remove concatenated fastq files
+####### remove concatenated fastq files
 if($keep_tmp == 0){
 	if(scalar(keys(%fq_filter)) > 1){
 		$cmd = "rm $out_dir/$project\_1.fq.gz $out_dir/$project\_2.fq.gz";
@@ -525,47 +550,69 @@ if($keep_tmp == 0){
 	}
 }
 
+################################ END ObiWITCH ################################
+
 #split demultiplexed files
 #not submitted via slurm
-$cmd = "02_ObiHelp_split_samples.pl $project\_results/07_$project\_final.fasta $project\_results/00_$project\__ngsfile.tsv";
+my $final_fasta= find_file("${project}_final.fasta","${project}_results/");# 1.) pattern 2.) path
+$cmd = "02_ObiHelp_split_samples.pl $final_fasta $project\_results/00_$project\__ngsfile.tsv";
 #if($slurm == 1){
 #	$cmd = "sbatch --job-name=$project\_demux $slurm_opts --wrap=\"$cmd\"";
 #}
 exe_cmd($cmd,$verbose,$dry);
 
+###
+# extract the leading number and increment it
+my $filename_fasta = basename($final_fasta);   # "09_BiodivSoup_final__FolDegenRev.fasta"
+#print $filename_fasta, "\n";
+$filename_fasta =~ m/(\d+)_/;   # capture digits before the first "_"
+my $num = $1;
+#print $num,"\n";
+$num++;
+#print $num, "\n"; exit;
+
 #find demultiplexed final fastas
 my @files = ();
 if($dry == 0){
+	print "Find demultiplexed files in: \t $out_dir/$project\_results";
 	opendir (RESULTS, "$out_dir/$project\_results") or die "ERROR\tCould not open directory $out_dir/$project\_results\n";	#opens the results directory
 	while (my $file = readdir(RESULTS)) {					#reads the results directory
+		print "$file \n";
 		next unless (-f "$out_dir/$project\_results/$file");		#returns only files from the results directory
-		if ($file =~ m/08_$project\_final__.*\.fasta/){			#ignores files that don't match the pattern of demultiplexed final fastas
+		if ($file =~ m/${num}_$project\_final__.*\.fasta/){			#ignores files that don't match the pattern of demultiplexed final fastas
 			push (@files, "$out_dir/$project\_results/$file");
 		}
 	}
+	#@files = glob("$out_dir/${project}_results/${num}_${project}_final__*.fasta");
 	closedir RESULTS;
 }
 else{
 	print STDERR "INFO\tDry run: Would search for files matching 9_$project\_final__.*\\.fasta in $out_dir/$project\_results\n";
 }
-
+#print "@files\n";
+#exit;
 #create a obiwizard config file for each file resulting from demultiplexing e.g. for each primer
+print "create a obiwizard config file for each file resulting from demultiplexing e.g. for each primer\n";
+#print "@files\n";
 my %configs;
 if($dry == 0){
 	foreach(@files){
 		my $input_assign = $_;
+		print $input_assign, "\n";
 		my $primer = (split(/__/,basename($input_assign)))[-1];
 		$primer =~ s/\.fasta$//;
-		my $db_path_new = "$out_dir/00_EmysR_ReferenceDB";
-		$cmd = "00_ObiMAGIC_obiwizard_config.pl $obiwizard_config $input_assign $primer $threads $db{$primer} $db_path_new $new_taxdump > $out_dir/$project\_obiwizard_$primer.ini";
+		my $db_path_new = "$out_dir/00_ReferenceDB_indexed";
+
+		$cmd = "00_ObiMAGIC_obiwizard_config.pl $obiwizard_config $input_assign $primer $threads $db{$primer} $db_path_new $new_taxdump > $out_dir/${project}_obiwizard_$primer.ini";
 		exe_cmd($cmd,$verbose,$dry);
-		$configs{$primer} = "$out_dir/$project\_obiwizard_$primer.ini";
+		$configs{$primer} = "$out_dir/${project}_obiwizard_$primer.ini";
 	}
 }
 else{
 	print STDERR "INFO\tDry run: Would create a obiwizard config file for each 9_$project\_final__.*\\.fasta file\n";
 }
 
+################################ START ObiWIZARD ################################
 #run obiwizard
 if($slurm == 1){
 	my $array_end = scalar(keys(%configs));
@@ -589,3 +636,26 @@ $cmd = "cd $out_dir && tar -czvf $project.final-results.tar.gz \$(find $project\
 exe_cmd($cmd,$verbose,$dry);
 
 exit 0;
+
+##############################################################################################################
+
+
+sub find_file {
+    my ($pattern, $startdir) = @_;
+    $startdir ||= ".";   # default: current dir
+    my $result;
+
+    find(
+        sub {
+            return unless -f;
+            if ($_ =~ /$pattern/) {
+                $result = $File::Find::name;
+                $File::Find::prune = 1;  # stop searching further
+            }
+        },
+        $startdir
+    );
+
+    return $result;  # undef if none found
+}
+

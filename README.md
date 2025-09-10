@@ -87,7 +87,7 @@ The environment variable `PATH` stores a list of directories where the system se
 `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` will search for depending executables and scripts in your `$PATH`.  
 To setup `$PATH` run the following command from the root directory of this repository:
 ```
-export PATH=$PATH:$(realpath $(pwd)):$(realpath $(pwd)/00_ObiScripts):$(realpath $(pwd)/00_ObiExtra)
+export PATH=$(realpath $(pwd)):$(realpath $(pwd)/00_ObiScripts):$(realpath $(pwd)/00_ObiExtra):$PATH
 ```
 This ensures the scripts can be found by `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` as well as they can be executed from any location.
 
@@ -96,6 +96,28 @@ This ensures the scripts can be found by `00_ObiMAGIC_main.pl`, `01_ObiWitch_mai
 ObiMAGIC will submit internal processes (like ObiWitch and ObiWizard) via Slurm, if `sbatch` detected and not switched off by the user with `-no-slurm`. Furthermore, ObiMAGIC will submit ObiWizard assignments via a Slurm job array, which will assure most parallel processing of multiple taxonomic assignments. If Slurm is not detected or the user switches off submission via Slurm, all commands will be executed locally and taxonomic assignments by ObiWizard will be executed consecutively to prevent RAM limitations on smaller computing devices.
 
 ## Usage
+
+### ObiMAGIC quick start
+
+Build the ObiMAGIC singularity container:
+```
+singularity build ObiMAGIC.sif ObiMAGIC.def
+```
+[ObiMAGIC.def](ObiMAGIC.def) is available in this repository.
+
+Download the container under the following DOI on FigShare: [10.6084/m9.figshare.30099733](https://doi.org/10.6084/m9.figshare.30099733) 
+
+Running the container:
+All ObiMAGIC Skripts and dependencies including NCBI’s new_taxdump (dowloaded during builing process) are included in the container. Furthermore all Scripts and depending software are included in the containers `$PATH`. Therefore, all relevant ObiMAGIC scripts, e.g. `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` can be called directly. To do so run for example:
+```
+singularity exec 00_ObiMAGIC_main.pl
+```
+
+The container is structured as follows:
+- ObiMAGIC: The recent version of all ObiMAGIC scripts:  `/ObiMAGIC/`
+- ObiTools: The most recent version of ObiTools, installed with install_obitools.sh and prefix obi4_ : `/ObiTools4/bin/`
+- cutadapt: Cutadapt 5.1 is installed in a python3 virtual environment: `/cutadapt-5.1/bin/`
+- new_taxdump: NCBI’s new_taxdump downloaded during building to a directory `/new_taxdump_$(date +%Y-%m-%d)` and softlink to this directory named new_taxdump is created. 
 
 ### ObiMAGIC
 To run ObiMAGIC with default settings, fastq files and demultiplexing file must be specified from the command line. Otherwise, modify the configuration file and specify the path to the configuration file on the command line.
@@ -261,7 +283,7 @@ In case these parts of the pipeline fail, `00_ObiMAGIC_main.pl` will show the ex
 - `3`: Demultiplexing file and sequencing fastq files do not exist.
 - `4`: No output files after demultiplexing (Path2). Possible issues with demultiplexing file.
 - `5`: Merging forward and reverse reads was not successful.
-- `6`: Removing not overlapping sequences was not successful or all sequences were removed. Check amplicon length and sequencing depth.
+- `6`: Removing not overlapping sequences was not successful or all sequences were removed(Path1). Check amplicon length and sequencing depth.
 - `7`: No output files after demultiplexing (Path1). Possible issues with demultiplexing file.
 - `8`: Demultiplexing file does not exist. Last check before downstream processing.
 - `9`: Dereplication was not successful.
@@ -270,8 +292,10 @@ In case these parts of the pipeline fail, `00_ObiMAGIC_main.pl` will show the ex
 - `12`: Input file for length/count filtering does not exist or is empty.
 - `13`: Input file for preparing final fasta file does not exist or is empty.
 - `14`: ObiWitch diagnostic plot was not created.
+- `15`: Can't find the input file for ObiWizard
 - `42`: Config file does not exist.
 - `66`: ObiWitch: ASVs are lost in the dereplication step. Two possible problems: RAM was too small or storage was to small.
+- `99`: ASVs could not be renamed, something is wrong with the mapping file (renamePattern.tsv)
 - `666`: ObiWizard: Sequences are lost in the assignment. Possible problems: RAM was too small, storage was to small or something is wrong with the sequencing length.
 
 ## Citation
@@ -290,7 +314,6 @@ R Core Team (2020). R: A language and environment for statistical computing. R F
 - R packages: 
   - Aphalo, P. J. (2024). Ggpmisc: Miscellaneous extensions to ’ggplot2’. https://CRAN.R-project.org/package=ggpmisc
   - Bache, S. M., & Wickham, H. (2022). Magrittr: A forward-pipe operator for r. https://CRAN.R-project.org/package=magrittr
-  - Coissac, E. (2024). ROBIFastread: Provides function for manipulating fasta files following the OBITools4 standard. https://git.metabarcoding.org/obitools/obitools4/robireadfasta.git
   - Cooley, D. (2022). Jsonify: Convert between ’r’ objects and javascript object notation (JSON). https://CRAN.R-project.org/package=jsonify
   - Kassambara, A. (2023). Ggpubr: ’ggplot2’ based publication ready plots. https://CRAN.R-project.org/package=ggpubr
   - Oksanen, J., Simpson, G. L., Blanchet, F. G., Kindt, R., Legendre, P., Minchin, P. R., O’Hara, R. B., Solymos,P., Stevens, M. H. H., Szoecs, E., Wagner, H., Barbour, M., Bedward, M., Bolker, B., Borcard, D.,Carvalho, G., Chirico, M., Caceres, M. D., Durand, S., . . . Weedon, J. (2024). Vegan: Communityecology package. https://CRAN.R-project.org/package=vegan

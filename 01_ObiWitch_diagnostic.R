@@ -5,14 +5,15 @@
 # Juliane Romahn
 # January 7, 2024
 # html_document
-# execute via: 01_ObiWitch_diagnostic.R PROJECT_FOLDER/ FASTA-in.Obi-Format.fasta NGSFILE.tsv threads_number full/path/to/00_ObiScripts/00_OBIMAGIC_functions.R
+# execute via: 01_ObiWitch_diagnostic.R PROJECT_FOLDER/ Community_matrix.fasta NGSFILE.tsv threads_number full/path/to/00_ObiScripts/00_OBIMAGIC_functions.R
+# Note: Community_matrix.fasta & NGSFILE.tsv are expected to be in the PROJECT_FOLDER
 ########################################
   
 rm(list=ls())  
 #install.packages("jsonify")
 #install.packages("devtools")
 #devtools::install_git("https://git.metabarcoding.org/obitools/obitools4/robireadfasta.git")
-library(ROBIFastread)
+#library(ROBIFastread)
 library(tidyverse)
 library(vegan)
 library(magrittr)
@@ -37,47 +38,76 @@ threads=args[4]
 functions_path=args[5]
 project=gsub("_results","", path)
 
+#print(functions_path)
+
+### for modification
+#setwd("/Users/juliane/Documents/00_Work_SGN/00_PhytoArk/XX_PAPERS/2025sub_ObiMAGIC/01_Benchmarking_resubmission/testing/")
+#path="BiodivSoup_trail_results"
+#input_file ="08_BiodivSoup_trail_final__matrix.csv"
+#ngs_file="00_BiodivSoup_trail__ngsfile.tsv"
+#threads=1
+#functions_path="00_OBIMAGIC_functions.R"
+#project=gsub("_results","", path)
+
+
 #### read in all functions 
 source(functions_path)
 if (length(threads)==0) { threads=1}
-output=gsub(".fasta", "", input_file)
+output=gsub("__matrix.csv", "", input_file)
+
+
 #############################
+input_file_pattern = gsub( "__.*","",input_file)
+input_file2= paste(input_file_pattern,"__general_infos.csv", sep="")
+
+
+#read it file with sequence length if available
+data <- data.frame()
+if(file.exists(file.path(path, input_file2))){
+  data <- read.table(file.path(path,input_file2), header=T, sep=",")
+}
+
+### create folder for the figures
+figure_folder=paste(input_file_pattern, "diagnostic_figures", sep="_")
+output_figures=file.path(path,figure_folder)
+if (!dir.create(output_figures)){
+  dir.create(output_figures)
+}
 
 
 ##############
-# convert ObiTools Output for Mothur
-data <- read_obifasta(file.path(path,input_file))
-data <- unique(data)
-Large <- extract_features(data,key="count")
-tab <- extract_readcount(data,key="merged_sample")
-community <- as.data.frame(as.matrix(tab))
+# read in community matrix
+community <- read.table(file.path(path,input_file), header=T, sep=",", check.names = FALSE) # check.names = FALSE otherwise : will be replaced, okay since it is changes soon
+community <- unique(community)
+row.names(community) <- community$id
+community$id <- NULL
 
 old_asv_names <- colnames(community)
 new_asv_names <- paste(asv_start,sprintf("%06d", c(1:length(colnames(community)))), sep="_")
 colnames(community) <- new_asv_names
+
+#overview how things are renames
+renaming <- data.frame(id= old_asv_names, id_new=new_asv_names )
+
 ##################
 
 
 ##############
-## reformat data 
-Large <- merge(Large, data.frame(id=old_asv_names, id_new = new_asv_names), by = "id")
-Large$definition <-NULL
+## reformat data  for mothur
 counttable <- as.data.frame(t(community))
-
 total <- rowSums(counttable)
 counttable <- cbind(total, counttable)
 Representative_Sequence <- rownames(counttable)
 counttable <- cbind(Representative_Sequence, counttable)
+
 ##################
 
 
 ################## create output files
-write.fasta(sequences = as.list(Large$sequence), names= Large$id_new, file.path(path, paste(output, "renamed_sequences.fasta", sep="__")), 
-            open = "w", nbchar = nchar(max(Large$sequence)), as.string = FALSE)
 write.table(counttable, file=file.path(path, paste(output, "mothur_counttable.csv", sep="__")), quote=FALSE, sep = "\t", row.names = F)
-write.table(Large, file=file.path(path, paste(output, "general_infos.tsv", sep="__")), quote=FALSE, sep = "\t", row.names = F)
+write.table(renaming, file=file.path(path, paste(output, "renamePattern.tsv", sep="__")), quote=FALSE, sep = "\t", row.names = F)
 save(community, file=file.path(path, paste(output, "community.RData", sep="__")))
-rm(Large,counttable)     
+rm(renaming,counttable)     
 
 
 ################################## PLOTTING ################################## 
@@ -113,7 +143,7 @@ if (length(index_position) >0 ){
 ############################################# PLOT #####################################################
 
 pdf(file = file.path(path, paste(output, "diagnosis_plots_bioinformatics.pdf", sep="__")), paper = "a4r")
-
+#dev.off()
 ### first plots are a project overview
 
 # secure that sample types are always named the same by sorting them before
@@ -125,10 +155,11 @@ color_df<- data.frame(type= type_List, color=selected)
 ###### project overview
 print("categorize")
 community_sum <- categorize_community(community,asv_start)
-#rint(community_sum)
+#print(community_sum)
+#print(colnames(community_sum))
 #quit()
 print("Project plotting")
-ggplot(community_sum, aes(area = replicates, fill = type, label= type, subgroup=type_long)) +
+plot <- ggplot(community_sum, aes(area = replicates, fill = type, label= type, subgroup=type_long)) +
   geom_treemap()+
   geom_treemap_subgroup_border(color="white", size=4)+
   geom_treemap_subgroup_text(place ="center",color="white",reflow = T)+
@@ -137,11 +168,36 @@ ggplot(community_sum, aes(area = replicates, fill = type, label= type, subgroup=
   labs(title= paste("Project overview:",output , "\nPrimer:", unique(community$primer)),
        subtitle = "Size represents replicate number\nColor coding is consistent within the document")+
   plot_theme  
+print(plot)
+plot_function(plot, file.path(output_figures, "01_project_overview__treemap"))
+
+#print(community_sum)
+#quit()
+
+community_sum_reads <- community_sum %>% select(-total_asv, -average_asv, -median_asv )
+community_sum_asvs <- community_sum %>% select(-total_reads, -average_reads, -median_reads )
+community_sum <- community_sum %>% select(-average_reads, -median_reads,-average_asv, -median_asv )
 
 #print it as table
-ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum), size=3)+
+plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum), size=3)+
   labs(title= paste("Project overview:",output ),
        subtitle = "Total includes multiplexed primers (if existing)")
+print(plot)
+plot_function(plot, file.path(output_figures, "02_project_overview_table"))
+
+
+plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum_reads), size=3)+
+  labs(title= paste("Project overview:",output ),
+       subtitle = "Total includes multiplexed primers (if existing)")
+print(plot)
+plot_function(plot, file.path(output_figures, "02_project_overview_table__reads"))
+
+plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum_asvs), size=3)+
+  labs(title= paste("Project overview:",output ),
+       subtitle = "Total includes multiplexed primers (if existing)")
+print(plot)
+plot_function(plot, file.path(output_figures, "02_project_overview_table__Asv"))
+
 
 ##  plots about Metabarcoding success and quality
 ### print read numbers in plate format if infomration exists
@@ -162,6 +218,9 @@ if ( length(index_position) >0 ){
             guides(color = guide_legend(nrow = 2))+ theme(legend.box="vertical")
           
           print(plot)
+          filename=paste("03_PCR_plate_setup__plate",no, sep="")
+          plot_function(plot, file.path(output_figures, filename))
+          
     }
   }
   rm(plate_plot)
@@ -169,16 +228,19 @@ if ( length(index_position) >0 ){
 
 
 ################################## print sequence length ##################################
-ggplot(data, aes(x=nchar(sequence))) + 
-  geom_histogram(fill="deeppink4", alpha=0.6) +
-  plot_theme+
-  labs(title= "Distribution of Amplicon Length (without primer pair sequence)", 
-       subtitle = paste(" Average amplicon length",mean(nchar(data$sequence)) , sep=" - "),
-       x= "Amplicon length (bp)",
-       y= "Number of ASVs")+
-  theme(axis.text.x = element_text(angle = 45,hjust=1))+
-  scale_y_continuous(labels = scales::comma)
-
+if(nrow(data)>0){
+  plot <- ggplot(data, aes(x=nchar(sequence))) + 
+    geom_histogram(fill="deeppink4", alpha=0.6) +
+    plot_theme+
+    labs(title= "Distribution of Amplicon Length (without primer pair sequence)", 
+         subtitle = paste(" Average amplicon length",mean(nchar(data$sequence)) , sep=" - "),
+         x= "Amplicon length (bp)",
+         y= "Number of ASVs")+
+    theme(axis.text.x = element_text(angle = 45,hjust=1))+
+    scale_y_continuous(labels = scales::comma)
+  print(plot)
+  plot_function(plot, file.path(output_figures, "03_Sequencing_Length_Distribution"))
+}
 rm(data)
 
 ################################## ASV ##################################
@@ -191,10 +253,11 @@ plot <- ggplot(community, aes(x=as.factor(type), y=total.asvs, fill=type)) +
   plot_theme+ theme(axis.text.x = element_text(angle = 45,hjust=1))+
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
-ggdraw(add_sub(plot, "Asteriks represent mean multiple pairwise tests against all", size=10))
+plot<- ggdraw(add_sub(plot, "Asteriks represent mean multiple pairwise tests against all", size=10))
+print(plot)
+plot_function(plot, file.path(output_figures, "04_ASVnumber_Distribution"))
 
-
-community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
+plot<- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
   ggplot( aes(x=as.factor(type), y=total.asvs, fill=type)) + 
     geom_violin( alpha=0.5) +
     labs(x = "Type", y="Total ASV no.", 
@@ -203,6 +266,8 @@ community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
     plot_theme+ 
     scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "05_ASVnumber_negative_control_overview"))
 
 ggplot(community, aes(x=as.factor(type), y=total.asvs, fill=type)) + 
   geom_violin( alpha=0.5) +
@@ -212,6 +277,8 @@ ggplot(community, aes(x=as.factor(type), y=total.asvs, fill=type)) +
   facet_wrap(~type, scales= "free") + plot_theme+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "05_ASVnumber_control_overview"))
 
 
 ################################## Reads ##################################
@@ -224,10 +291,11 @@ plot <- ggplot(community, aes(x=as.factor(type), y=total.reads, fill=type)) +
   plot_theme+ theme(axis.text.x = element_text(angle = 45,hjust=1))+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
-ggdraw(add_sub(plot, "Asteriks represent mean multiple pairwise tests against all", size=10))
+plot<- ggdraw(add_sub(plot, "Asteriks represent mean multiple pairwise tests against all", size=10))
+print(plot)
+plot_function(plot, file.path(output_figures, "05_Readnumber_Distribution"))
 
-
-community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
+plot<- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
   ggplot(aes(x=as.factor(type), y=total.reads, fill=type)) + 
   geom_boxplot(alpha=0.5)+
   labs(x = "Type", y="Total Read no.", 
@@ -237,8 +305,10 @@ community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
   plot_theme+ theme(axis.text.x = element_text(angle = 45,hjust=1))+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "05_Readnumber_negative_control_overview"))
 
-ggplot(community, aes(x=as.factor(type), y=total.reads, fill=type)) + 
+plot <- ggplot(community, aes(x=as.factor(type), y=total.reads, fill=type)) + 
   geom_violin(alpha=0.5) +
   labs(x = "Type", y="Total Read no.", 
        title = "Control Overview - Reads",
@@ -247,8 +317,10 @@ ggplot(community, aes(x=as.factor(type), y=total.reads, fill=type)) +
   facet_wrap(~type, scales= "free") + plot_theme+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "05_Readnumber_control_overview"))
 
-## replication control
+################################## replication control ################################## 
 plot <- ggplot(community, aes(x=as.factor(repl_type), y=total.reads)) + 
   geom_boxplot(fill="deeppink4", alpha=0.5)+
   labs(x = "Type", y="Total Read no.", 
@@ -256,7 +328,10 @@ plot <- ggplot(community, aes(x=as.factor(repl_type), y=total.reads)) +
        subtitle = "Total Read number distribution of samples for every replicate") +
   plot_theme+ theme(axis.text.x = element_text(angle = 45,hjust=1))+ 
   scale_y_continuous(labels = scales::comma)
-ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replicates of all other sample types", size=10))
+plot<- ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replicates of all other sample types", size=10))
+print(plot)
+plot_function(plot, file.path(output_figures, "06_Readnumber_negative_control_overview_afterReplicates"))
+
 
 
 plot <- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
@@ -268,8 +343,9 @@ plot <- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))
   plot_theme+ theme(axis.text.x = element_text(angle = 45,hjust=1))+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
-ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replicates of all other sample types", size=10))
-
+plot <- ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replicates of all other sample types", size=10))
+print(plot)
+plot_function(plot, file.path(output_figures, "06_Readnumber_negative_control_overview_afterReplicates"))
 
 plot <- ggplot(community, aes(x=as.factor(repl_type), y=total.asvs)) + 
   geom_boxplot(fill="deeppink4", alpha=0.5) +
@@ -277,47 +353,55 @@ plot <- ggplot(community, aes(x=as.factor(repl_type), y=total.asvs)) +
        title = "Control Overview - Total ASV number distribution for every replicate",
        subtitle = "P represents Plates of PCR & Multiplex controls, R replciates of all other sample types") +
   plot_theme+ scale_y_continuous(labels = scales::comma)
-ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replciates of all other sample types", size=10))
+plot <- ggdraw(add_sub(plot, "P represents Plates of PCR & Multiplex controls, R replciates of all other sample types", size=10))
+print(plot)
+plot_function(plot, file.path(output_figures, "06_ASVnumber_control_overview_afterReplicates"))
 
 ##################################
 #Frequency distribution of read numbers in **ASVs**
 ##################################
 
-reads_per_seq_variant <- apply(community[,index],2,sum)
-# caluclate threshold:
+# 1) Summed reads per ASV (across selected samples/columns)
+reads_per_seq_variant <- apply(community[, index], 2, sum)
+
+# 2) Thresholds (as proportions of the total reads)
 summ_of_reads <- sum(reads_per_seq_variant)
-rarity_threshold1 <- summ_of_reads*0.00001
-rarity_threshold2 <- summ_of_reads*0.000005
-rarity_threshold3 <- summ_of_reads*0.000002
-rarity_threshold4 <- summ_of_reads*0.000001
-rarity_threshold5 <- summ_of_reads*0.0000005
+thr_props  <- c(1e-5, 5e-6, 2e-6, 1e-6, 5e-7)
+thr_vals   <- summ_of_reads * thr_props
+thr_colors <- c("red", "darkred", "blue", "darkblue", "darkgreen")
+thr_labs   <- format(thr_props, scientific = FALSE)
 
-#plot frequen
-freq_table = data.frame(table(reads_per_seq_variant))
-x_max<-mean(as.numeric(freq_table$reads_per_seq_variant))*3
-y_max<-max(as.numeric(freq_table$Freq))
+thr_df <- data.frame(x = thr_vals, label = thr_labs, col = thr_colors)
 
+# 3) Frequency table (how many ASVs have N reads)
+freq_table <- as.data.frame(table(reads_per_seq_variant))
+names(freq_table) <- c("reads", "freq")
+freq_table$reads <- as.numeric(as.character(freq_table$reads))
 
-freq_table$reads_per_seq_variant <- 
-  as.vector(freq_table$reads_per_seq_variant)
-plot(freq_table, log = c("xy"),
-     main="Frequency distribution of read numbers in ASVs\n How abundanted is each ASV?",
-     sub= "Note: Lines & colors represent different proportion of total read number",
-     xlab = c("Read count of an ASV"),
-     ylab= "Freq/Abu") +
-  abline(v =rarity_threshold1, col="red")+
-  text(x_max,y_max*0.9, "0.00001", col="red")+
-  abline(v =rarity_threshold2, col="darkred")+
-  text(x_max,y_max*0.70, "0.000005", col="darkred")+
-  abline(v =rarity_threshold3, col="blue")+
-  text(x_max,y_max*0.55, "0.000002", col="blue")+
-  abline(v =rarity_threshold4, col="darkblue")+
-  text(x_max,y_max*0.43, "0.000001", col="darkblue")+
-  abline(v =rarity_threshold5, col="darkgreen")+
-  text(x_max,y_max*0.30, "0.0000005", col="darkgreen")
+# Remove zeros for log scales
+freq_plot <- subset(freq_table, reads > 0 & freq > 0)
 
-#dev.off()
-#quit()
+# 4) Plot
+plot <- ggplot(freq_plot, aes(x = reads, y = freq)) +
+  geom_point(alpha = 0.6, size = 2) +
+  # vertical threshold lines
+  geom_vline(data = thr_df, aes(xintercept = x, color = col), linewidth = 0.7, show.legend = FALSE) +
+  # text labels for thresholds
+  annotate("text",
+           x = mean(freq_plot$reads) * 3, y =  max(freq_plot$freq) * c(0.90, 0.70, 0.55, 0.43, 0.30),
+           label = thr_labs, hjust = 1, vjust = 1, size = 3.2,
+           color = thr_colors) +
+  scale_x_log10() +  scale_y_log10() +plot_theme+
+  labs(
+    title = "Frequency distribution of read numbers in ASVs",
+    subtitle = "Lines & colors represent different proportions of total read number",
+    x = "Read count of an ASV",
+    y = "Frequency"
+  )
+  
+print(plot)
+plot_function(plot, file.path(output_figures, "07_Low_frequency_ASV_detection"))
+
 
 
 ##################################
@@ -326,26 +410,60 @@ plot(freq_table, log = c("xy"),
 
 locations_per_seq_variant <- apply(community[,index]!= 0 , 2, sum)  #remove rows with any zero
 freq_loc_table <- data.frame(table(locations_per_seq_variant))
-freq_loc_table$locations_per_seq_variant <- as.vector(freq_loc_table$locations_per_seq_variant)
-plot(freq_loc_table,log = c("xy"), 
-     main="Occupancy/Frequency distribution of ASVs across replicates\n How often is each ASV represented?", 
-     xlab = c("Abundance of an ASV in replicate no."), 
-     ylab= "Frequency/Abundance") 
+names(freq_loc_table) <- c("occ", "freq")
+freq_loc_table$occ  <- as.numeric(as.character(freq_loc_table$occ))
+freq_loc_table$freq <- as.numeric(freq_loc_table$freq)
+
+# Remove zeros for log scales
+freq_plot2 <- subset(freq_loc_table, occ > 0 & freq > 0)
+
+# 3) Plot
+plot <- ggplot(freq_plot2, aes(x = occ, y = freq)) +
+  geom_point(alpha = 0.6, size = 2) +
+  scale_x_log10() +  scale_y_log10() + plot_theme+
+  labs(
+    title = "Occupancy distribution of ASVs across replicates",
+    subtitle = "How often each ASV is represented",
+    x = "Number of replicates in which an ASV occurs",
+    y = "Frequency of ASVs"
+  )
+print(plot)
+plot_function(plot, file.path(output_figures, "07_Replicate_number_ASV"))
+
 rm(locations_per_seq_variant,freq_loc_table)
 
 ##################################
 #Frequency distribution of  **replicates**
 ##################################
 
-ggplot(community, aes(x=as.numeric(total.reads), fill=type)) + #
+plot <- ggplot(community, aes(x=as.numeric(total.reads), fill=type)) + #
   geom_histogram(  color="#e9ecef", alpha=0.8, position = 'identity') + # binwidth=0.1,
   labs(fill="", title= "Frequency distribution of Total Read No. across replicates", 
        x= "Total read no.", y="Freq")+
   scale_x_log10(labels = scales::comma) +plot_theme + 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "08_readnumber_frequency_replicates"))
 
-ggplot(community, aes(x=total.asvs, fill=type)) + #
+
+medians <- community %>%
+  group_by(type) %>%
+  summarise(median_reads = median(as.numeric(total.reads), na.rm = TRUE))
+
+plot <- plot +
+  geom_vline(data = medians, 
+             aes(xintercept = median_reads, color = type),
+             linetype = "dashed", size = 1) +
+  scale_color_manual(values = color_df$color, breaks = color_df$type)+
+  labs(subtitle ="Line represents median of the reads groupd after reads", color="")
+
+print(plot)
+plot_function(plot, file.path(output_figures, "08_readnumber_frequency_replicates_median"))
+
+
+
+plot<- ggplot(community, aes(x=total.asvs, fill=type)) + #
   geom_histogram(  color="#e9ecef", alpha=0.8, position = 'identity') + # binwidth=30,
   labs(fill="", title= "Frequency distribution of ASV no. in replicates", 
        x= "Total ASV no.", y="Freq")+
@@ -353,9 +471,12 @@ ggplot(community, aes(x=total.asvs, fill=type)) + #
   scale_y_continuous(labels = scales::comma)+
   plot_theme+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "08_ASVnumber_frequency_replicates"))
+
 
 #Frequency distribution  splitted after Sample Type
-ggplot(community, aes(x=as.numeric(total.reads), fill=type)) + #
+plot <- ggplot(community, aes(x=as.numeric(total.reads), fill=type)) + #
   geom_histogram(  color="#e9ecef", alpha=0.8, position = 'identity') + # binwidth=0.1,
   labs(fill="", title= "Frequency distribution of Read no. in replicates after Sample Type", 
        x= "Total read no.", y="Freq")+
@@ -364,8 +485,11 @@ ggplot(community, aes(x=as.numeric(total.reads), fill=type)) + #
   theme(legend.position="none")+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "08_readnumber_frequency_SampleType"))
 
-ggplot(community, aes(x=total.asvs, fill=type)) + #
+
+plot <- ggplot(community, aes(x=total.asvs, fill=type)) + #
   geom_histogram(  color="#e9ecef", alpha=0.8, position = 'identity') + # binwidth=0.1,
   labs(fill="", title= "Frequency distribution of ASV no. in replicates after Sample Type", 
        x= "Total read no.", y="Freq")+
@@ -374,9 +498,12 @@ ggplot(community, aes(x=total.asvs, fill=type)) + #
   theme(legend.position="none")+ 
   scale_y_continuous(labels = scales::comma)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "08_ASVnumber_frequency_SampleType"))
+
 
 ################################## Richness ~ reads ##################################
-ggplot(community, aes(x= total.reads, y= total.asvs, color= type)) + 
+plot <- ggplot(community, aes(x= total.reads, y= total.asvs, color= type)) + 
   geom_point() + 
   coord_trans(x="log2", y="log2") + theme_classic()+ 
   labs(title = "Total ASVs vs. Total Read no. per replicates grouped by Sample Type",
@@ -387,6 +514,8 @@ ggplot(community, aes(x= total.reads, y= total.asvs, color= type)) +
   scale_x_continuous(labels = scales::comma,
                      guide = guide_axis(angle = 45))+
   scale_color_manual(values=color_df$color, breaks = color_df$type)
+print(plot)
+plot_function(plot, file.path(output_figures, "09_ASV_vs_readno_per_replicate"))
 
 
 ################################## Ordination ##################################
@@ -418,13 +547,16 @@ for (pr in unique(community$primer)){
   bray_data <- metaMDS(subset_community[,index], distance="bray", parallel=threads)
   nmds <- plot_simpleNDMS_symbol(bray_data, subset_community, "type")
   
-  #plot
+  #####plot
   nmds[[2]] <- nmds[[2]] + 
     labs(title = paste(pr, "Similarity between all replicates ", sep=" - "),
          subtitle=" Bray Curtis Distance grouped after Sample Type (seed no. 25)",
          color="Sample Type")+ 
     scale_color_manual(values=color_df$color, breaks = color_df$type)
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_ordination_after_SampleType",sep="_")))
+  
+  
   
   ## remove low read replcicates
   print("low abundant replicates removed")
@@ -445,6 +577,7 @@ for (pr in unique(community$primer)){
   nmds[[2]] <- ggdraw(add_sub(nmds[[2]], 
                  "Low abundant replicates: replicates with less than 1% reads of max sample read number\n Colors represent samples", size=10))
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_ordination_after_SampleType_filtered",sep="_")))
   
 
   ##### ordination with spiders for samples not controls
@@ -464,6 +597,8 @@ for (pr in unique(community$primer)){
     scale_color_manual(values=color_samples)
   nmds[[2]] <- ggdraw(add_sub(nmds[[2]], "Colors represent samples not sample types", size=10))
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_ordination_after_SampleType_noControls",sep="_")))
+  
   
   ##spider plot
   nmds <- plot_simpleNDMS_spider(bray_data, subset_community[index_samples,], "sample")
@@ -476,6 +611,7 @@ for (pr in unique(community$primer)){
     scale_color_manual(values=color_samples)
     nmds[[2]] <- ggdraw(add_sub(nmds[[2]], "Colors represent samples not sample types", size=10))
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_spider_after_SampleType_noControls",sep="_")))
   
   ##############
   ## remove low read samples
@@ -496,6 +632,7 @@ for (pr in unique(community$primer)){
   
   nmds[[2]] <- ggdraw(add_sub(nmds[[2]], "Low abundant replicates: replicates with less than 1% reads of max sample read number\n Colors represent samples", size=10))
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_ordination_after_SampleType_noControls_filtered",sep="_")))
   
   ##spider plot
   nmds <- plot_simpleNDMS_spider(bray_data, subset_community[index_samples,], "sample")
@@ -508,6 +645,7 @@ for (pr in unique(community$primer)){
     scale_color_manual(values=color_samples)
   nmds[[2]] <- ggdraw(add_sub(nmds[[2]], "Low abundant replicates: replicates with less than 1% reads of max sample read number\n Colors represent samples", size=10))
   print(nmds[[2]])
+  plot_function(nmds[[2]], file.path(output_figures, paste("10",pr,"NMDS_filtered_after_SampleType_noControls",sep="_")))
   
   
   rm(bray_data, nmds,subset_community)
@@ -532,6 +670,8 @@ if( length(unique(community$primer))>1){
     scale_fill_ghibli_d("LaputaMedium",direction = -1)
   
   print(plot)
+  plot_function(plot, file.path(output_figures, "11_proportion_different_primers_readnumber"))
+  
   
   plot <- ggplot(summary_primer, aes(x="", y=asv, fill=primer)) +
     geom_bar(stat="identity", width=1, color="white") +
@@ -544,6 +684,8 @@ if( length(unique(community$primer))>1){
     scale_fill_ghibli_d("LaputaMedium",direction = -1)
   
   print(plot)
+  plot_function(plot, file.path(output_figures, "11_proportion_different_primers_ASVnumber"))
+  
 }
 
 dev.off()

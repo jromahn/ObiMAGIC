@@ -1,15 +1,17 @@
+#!/usr/bin/env Rscript
 
 #############################
 ### pattern to extract from replicate name: sample (level above repl), type & ASV names
+## (PRIMER__TYPE_NUMBERs_(R|P).*) or TYPE_NUMBERs_(R|P).*
 # matching pattern will be removed via gsub(so describe how to not find if)
 repl_identifier="_(R|P).*" ## pattern to remove replicate & plate names
 # new one if system changed to KAR23_0001_R01 --> first part includes information about project and sample type
 type_identifier="_.*" ## patter to identify if it is a sample, a negative control or positive control
 asv_start="ASV" ### prefix for rename and enumerating asv names
-grep_negative_controls <- "FN$|SN$|EN$|MN$|PN$" # patter to find negative controls
-grep_controls <- "FN$|SN$|SP$|EN$|FP$|EP$|MN$|PN$|PP$" # patter to find negative & positive controls
-#############################
+grep_negative_controls <- "FN$|SN$|EN$|MN$|PN$" # patter to find negative controls 
+grep_controls <- "FN$|SN$|SP$|EN$|FP$|EP$|MN$|PN$|PP$" # patter to find negative & positive controls 
 
+#############################
 ## categorize data by negative and positive control shortnings
 categorize_community <- function(data,asv_start){
   #first calculcate total number of ASV present
@@ -23,15 +25,31 @@ categorize_community <- function(data,asv_start){
           summarise(total_asv=sum(occurence))%>%
           ungroup()
 
+
+  asv_av <- data %>% select(type,all_of(index) )%>%
+          rownames_to_column("rownames")%>%
+          pivot_longer(!c(type,rownames), names_to="ASV", values_to = "reads")%>%
+          mutate(occurence=1*(reads>0))%>%
+          group_by(rownames, type)%>%
+          summarise(asv_no = sum(occurence))%>%
+          unique()%>%
+          group_by(type)%>%
+          summarise(average_asv=round(mean(asv_no),1),
+                    median_asv=median(asv_no))%>%
+          ungroup()
+
   data <- data %>% 
     group_by(type)%>%
     summarize(replicates_total=n(),
               replicates=length(unique(replicate)),
               samples_total=length(unique(full_sample)),
               samples= length(unique(sample)),
-              total_reads=sum(total.reads))%>%
+              total_reads=sum(total.reads),
+              average_reads= round(mean(total.reads),1),
+              median_reads=median(total.reads))%>%
     ungroup()%>%
     left_join(asv, by ="type")%>%
+    left_join(asv_av, by ="type")%>%
     mutate(type_long=ifelse(grepl("FN$", type), "Field Neg. Control",
                      ifelse(grepl("SN$", type), "Sample Neg. Control",
                      ifelse(grepl("EN$", type), "Extraction Neg. Control",
@@ -42,8 +60,18 @@ categorize_community <- function(data,asv_start){
                      ifelse(grepl("EP$", type), "Extraction Pos. Control",
                      ifelse(grepl("PP$", type), "PCR Pos. Control","Sample"))))))))))%>%
   
-  
+  #print(colnames(data))
   return(data)
+}
+
+
+####### settings to save figures
+plot_function <- function(plot,figure_full_file ){
+  figure_width=10
+  figure_height=8
+  figure_format="png" # allowd: jpg, pdf, tiff, png
+  figure_dpi=300
+  ggsave(plot, file=paste(figure_full_file,figure_format, sep="."), width=figure_width, height=figure_height,dpi=figure_dpi,bg = "white")
 }
 
 

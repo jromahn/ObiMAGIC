@@ -1,0 +1,33 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%help
+	ObiMAGIC - Metabarcoding Analysis Guidance Integration Control Pipeline for ObiTools4
+	All ObiMAGIC scripts and dependencies can be called directly, e.g.:
+	singularity exec 00_ObiMAGIC_main.pl
+
+%files
+	/cluster/home/tilman/obimagic/obimagic_resumbission/obimagic_gitbranch_august2025 /ObiMAGIC
+
+%post
+	apt-get -y update
+	apt-get -y install --no-install-recommends perl libjson-perl libgd-perl r-base r-cran-ggplot2 r-cran-vegan build-essential curl libcurl4-gnutls-dev zlib1g-dev libssl-dev python3-dev python3-pip python3-venv wget pigz git
+	cpan App::cpanminus
+	cpanm Cwd File::Basename IO::Zlib IPC::Cmd List::MoreUtils File::Find Encode Text::Iconv Spreadsheet::XLSX
+	R -e "install.packages(c('cowplot','dplyr','gapminder','ggplot2','ggpmisc','ggpubr','ghibli','magrittr','plotly','seqinr','taxize','taxonomizr','tidyverse','treemapify','vegan'),repos='http://cran.us.r-project.org')"
+	python3 -m venv cutadapt-5.1
+	cutadapt-5.1/bin/pip3 install --upgrade pip
+	cutadapt-5.1/bin/pip3 install cutadapt==5.1
+	curl -L https://raw.githubusercontent.com/metabarcoding/obitools4/master/install_obitools.sh | bash -s -- --install-dir ObiTools4/ --obitools-prefix obi4_
+	mkdir new_taxdump_$(date +%Y-%m-%d)
+	cd new_taxdump_$(date +%Y-%m-%d)
+	wget https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz
+	tar xf taxdump.tar.gz
+	rm taxdump.tar.gz
+	cd ..
+	ln -s new_taxdump_$(date +%Y-%m-%d) new_taxdump
+
+%environment
+    export LC_ALL=C
+    export PATH=/ObiMAGIC:/ObiMAGIC/00_ObiScripts:/ObiMAGIC/00_ObiExtra:/ObiTools4/bin:/cutadapt-5.1/bin:$PATH
+

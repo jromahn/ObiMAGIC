@@ -2,6 +2,7 @@
 
 use strict;
 use warnings;
+use Encode qw(encode);
 
 
 ###################################################
@@ -16,8 +17,8 @@ use warnings;
 # dependencies: perl
 ###################################################
 
-my $input_file="05_cleaned_EMBL_Euka02_L500_tax.tsv"; #input filename and if necceassary path to file
-my $output_file="EMBL_CRABS_database_Aug24.fasta"; #output filename and if necceassary path to file
+my $input_file="Euka02_CRABS_EMBL_new//05_cleaned_EMBL_Euka02_L500_tax.tsv"; #input filename and if necceassary path to file
+my $output_file="Euka02_CRABS_EMBL_new/EMBL_CRABS_database_Aug24_Euka02_L500_new.fasta"; #output filename and if necceassary path to file
 
 ####################################################################################################################################################
 ##################################################  PLEASE DO NOT CHANGE ANYTHING FROM HERE ON #####################################################
@@ -30,6 +31,18 @@ open(my $FH_new, ">", $output_file) or die "Can not create $output_file: $! \n";
 while( defined (my $line = <$FH> )){
     chomp $line;
     next if $line =~ /^seqID/;
+    #remove any possible problematic special characters
+    $line = encode("UTF-8", $line);
+    $line =~ s/'//g;
+    $line =~ s/&//g;
+    $line =~ s/\//_/g;
+    $line =~ s/\+/_/g;
+    $line =~ s/\-/_/g;
+    $line =~ s/\|/_/g;
+    $line =~ s/\[//g;
+    $line =~ s/\#//g;
+    $line =~ s/\]//g;
+    
     
     ## extract important information from file
     my @a_line = split("\t", $line);
@@ -37,7 +50,8 @@ while( defined (my $line = <$FH> )){
     my $asseccion = $a_line[0];
     my $species_name = $a_line[8];
     $species_name =~ s/"//g;
-    (my $scientific_name= $species_name) =~ s/(\w+)_([a-zA-Z.]+).*/$1 $2/;
+    $species_name=~ s/^cf\._//;
+    (my $scientific_name= $species_name) =~ s/([a-zA-Z]+)_([a-zA-Z\.]+).*/$1 $2/;
     my $seq = $a_line[9];
 
     ## create new output

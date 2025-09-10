@@ -2,18 +2,20 @@
 work_dir=$(pwd)
 echo "$(realpath $0) $*"
 ########################################################################################################
-# ObiTools4 Script for ASSIGNMEN    
+# ObiTools4 Script for ASSIGNMENT    
 # 
 ###################################################
-# Pipeline written by Juliane Romahn ( email: romahnjuliane@gmail.com)
+# Pipeline written by Juliane Romahn 
 # version: "0.1" - 05.03.2025
-version="0.1"
+# version: "0.2" - 27.08.2025 - Juliane Romahn, add obicsv & obimarix, test if input file exists
+version="0.2"
 ###################################################
 
 
 ######################################################################################################################################
 ###### Prepare handling ARGV input
 ######################################################################################################################################
+start=$(date)
 
 #declare ARGV variables saved as default to overwrite config
 input_DF=""    
@@ -196,16 +198,53 @@ input_db=$db_path_to_file
 ######################################################################################################################################
 mkdir -p $work_dir
 mkdir -p $db_path_new
+index_time=0
 
+### get versions and compare with ref db
+version_index=$(obi4_obirefidx --version  2>&1  | awk -F'Release ' '{print $2}' | sed -E 's/ \(([^)]+)\)/_\1/')
+echo $version_index
+#exit
 # check if database was already indexed otherwise index it
 if [ $( grep "obitag_ref_index" $db_path_to_file | wc -l ) -gt 0 ] ; then 
             input_db=$db_path_to_file
+
+            ##########################################################################
+            ##### test for version compatability
+            tmp="${input_db#*indexed_}"   # remove everything up to indexed_
+            version_db="${tmp%.fasta}"            # remove trailing .fasta
+
+            if [[ "$version_index" != "$version_db" ]]; then
+                echo "">> $readme_file
+                printf "WARNING \t Are you sure that you are using the same version of ObiTools to index the database as the version you want to use for the assignment? \n">> $readme_file
+                printf "WARNING \t Version you are using now: $version_index \n ">> $readme_file
+                printf "WARNING \t IF specified in the DB name, the DB version:$version_db \n ">> $readme_file
+                echo "">> $readme_file
+            fi
+            #####################################
 else
             #ensure that sequences each have a unique identification & define new db
-            input_db=$( basename $db_path_to_file .fasta )
-            input_db="$db_path_new/$input_db.indexed.fasta"
+            input_dbname=$( basename $db_path_to_file .fasta )
+            input_db="$db_path_new/$input_dbname.indexed_$version_index.fasta"
+            input_db_readme="$db_path_new/$input_dbname.indexed_$version_index.README.txt"
+            echo " Start to index reference database: This can take loong"
+            echo "obi4_obirefidx --max-cpu $threads -t $tax_path_to_file $db_path_to_file  > $input_db"
             obi4_obirefidx --max-cpu $threads -t $tax_path_to_file $db_path_to_file  > $input_db
+            index_time=$(date)
+            
+            #create readme for the reference database
+            > "$input_db_readme"
+            echo "README - important information for the reference database" > $input_db_readme
+            printf "PATH ObiTools: \t">> $input_db_readme
+            which obi4_obirefidx >> $input_db_readme
+            printf "ObiTools Version: \t">> $input_db_readme
+            obi4_obirefidx --version &>> $input_db_readme
+            printf "Input FASTA: \t $db_path_to_file \n">> $input_db_readme
+            printf "Input TAXDUMP: \t $tax_path_to_file \n">> $input_db_readme
+            printf "OUTPUT DATABASE: \t $input_db \n">> $input_db_readme
+            #exit
 fi
+
+
 
 #exit
 ######################################################################################################################################
@@ -219,9 +258,13 @@ printf "Thread number : \t $threads\n" >> $readme_file
 printf "OBiWizard Version: \t $version\n" >> $readme_file
 printf "OBiTools4 Version: \t" >> $readme_file
 obi4_obiannotate --version &>> $readme_file
+printf "Path of the ObiTools4 : \t " >> $readme_file
+which obi4_obiannotate  >> $readme_file
 echo ""
-echo "Start assignment with reference DB: $db_path_to_file "
+echo "Start assignment with reference DB: $db_path_to_file " >> $readme_file
 
+
+##########################################################################
 # created header cleaned files ( 1.step)
 input_filename=$( basename $input_assign )
 input_filename2=$( basename $input_assign .fasta)
@@ -247,8 +290,10 @@ file3="${formatted_number}_${project}_final_${identifier}__assigned.fasta"
 # stats about tax dump file to know when downloaded (which version)
 printf  "ObiTools4 \t $obitools_version \n\n" >> $readme_file
 printf  "$(basename $input_assign) \t Inputfile for assignment \n" >> $readme_file
+printf "Taxdump fors Assignment: \t $tax_path_to_file\n" >> $readme_file
 
 ## only keep count and sample information
+echo "obi4_obiannotate -k count -k merged_sample  $input_assign > $output_first"
 obi4_obiannotate -k count -k merged_sample  $input_assign > $output_first
 
 
@@ -268,13 +313,14 @@ obi4_obigrep -L 4 $output_first > $short_amplicons
 input_assign=$output_second
 LOG_assignment=LOG_assignment_errors_${identifier}_$now.txt
 #if small no problems occur
-if [ $( grep ">" $input_assign | wc -l ) -lt 1000 ] ; then
-        echo "obi4_obitag --max-cpu $threads --no-order -t $tax_path_to_file -R $input_db $input_assign > $output/08_${project}_final_${identifier}__assigned.fasta"
-        obi4_obitag --max-cpu 50 --no-order -t $tax_path_to_file -R $input_db $input_assign > $output/08_${project}_final_${identifier}__assigned.fasta 2>>"$LOG_assignment"
+if [ -f $input_assign ] && [ $( stat -c%s $input_assign ) -gt 0 ]; then
+    if [ $( grep ">" $input_assign | wc -l ) -lt 1000 ] ; then
+        echo "obi4_obitag --max-cpu $threads --no-order -t $tax_path_to_file -R $input_db $input_assign > $output/$file3"
+        obi4_obitag --max-cpu $threads --no-order -t $tax_path_to_file -R $input_db $input_assign > $output/$file3 2>>"$LOG_assignment"
 
-else #split into several fasta files due to software struggles
-        mkdir -p $work_dir/$identifier
-        cd $work_dir/$identifier
+    else #split into several fasta files due to software struggles
+        mkdir -p $work_dir/${project}_$identifier
+        cd $work_dir/${project}_$identifier
         touch LOG_file_obi4_assignment.txt
         headers=$( grep '>' $input_assign | wc -l  )
         line_no=$((( $headers + 999) / 1000 ))
@@ -283,16 +329,21 @@ else #split into several fasta files due to software struggles
 
         counter=1
         for file in $( ls toto__*.fasta ); do
-            echo "obi4_obitag --max-cpu 50  --no-order -t $tax_path_to_file -R $input_db $file >> $output/08_${project}_final_${identifier}__assigned_$counter.fasta">> LOG_file_obi4_assignment.txt
-            obi4_obitag --max-cpu 50  --no-order -t $tax_path_to_file -R $input_db $file >> $output/08_${project}_final_${identifier}__assigned_$counter.fasta 2>>"$LOG_assignment"
+            echo "obi4_obitag --max-cpu $threads --no-order -t $tax_path_to_file -R $input_db $file >> $output/${formatted_number}_${project}_final_${identifier}__assigned_$counter.fasta">> LOG_file_obi4_assignment.txt
+            obi4_obitag --max-cpu $threads  --no-order -t $tax_path_to_file -R $input_db $file >> $output/${formatted_number}_${project}_final_${identifier}__assigned_$counter.fasta 2>>"$LOG_assignment"
             counter=$( expr $counter + 1 )
+            #exit
         done
         cd $work_dir
-        rm -r $work_dir/$identifier
+        rm -r $work_dir/${project}_$identifier
 
         
-        cat $output/08_${project}_final_${identifier}__assigned_*.fasta > $output/$file3
-        rm $output/08_${project}_final_${identifier}__assigned_*.fasta
+        cat $output/${formatted_number}_${project}_final_${identifier}__assigned_*.fasta > $output/$file3
+        rm $output/${formatted_number}_${project}_final_${identifier}__assigned_*.fasta
+    fi 
+else 
+    printf  "Something is off : $input_assign is empty or not existing \n"
+    exit 15
 fi
 #exit
 
@@ -316,13 +367,28 @@ stat -c '%w' $tax_path_to_file/names.dmp  >> $readme_file
 printf  "${input_db} \t Reference db for ${file3}  \n" >> $readme_file
 printf  "${file3} \t Assigned sequences with ObiTools ASV names \n" >> $readme_file
 
+
+######################################################################################################################################
+## new for version 0.2 adding obicsv and obimatrix
+#### create commmunity matrix
+file3_name=$( basename $file3 .fasta )
+file4="${file3_name}__matrix.csv"
+
+echo "Create community matrix"
+
+obi4_obimatrix $output/$file3 > $output/$file4
+obi4_obicsv --id --taxon -k obitag_bestid -k obitag_rank -k obitag_bestmatch  --sequence $output/$file3 -o "$output/${file3_name}__taxonomy_info.csv"
+
+printf  "${file3_name}__taxonomy_info.csv, \t General information of sequences/ASVs provided by ObiTools4 including original SV names\n" >> $readme_file ##
+printf  "$file4, \t Community matrix, with replicate names in "id" column and original ASV names as columns each\n" >> $readme_file ##
+
 ######################################################################################################################################
 ############################################################ Diagnosis plot ##########################################################
 ######################################################################################################################################
-
-if [ -f $output/$file3 ] && [ $( stat -c%s $output/$file3 ) -gt 0 ]; then
-    echo "03_ObiWizard_diagnostic.R $output $file3 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)"
-    03_ObiWizard_diagnostic.R $output $file3 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)
+#exit
+if [ -f $output/$file4 ] && [ $( stat -c%s $output/$file4 ) -gt 0 ]; then
+    echo "03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)"
+    03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)
 
     #exit
     file3_name=$( basename $file3 .fasta )
@@ -332,17 +398,18 @@ if [ -f $output/$file3 ] && [ $( stat -c%s $output/$file3 ) -gt 0 ]; then
 
     printf  "\n" >> $readme_file
     printf  "${file3_name} \t ASVs are renamed in this step and shorten   \n" >> $readme_file
-    printf  "${file3_name}__renamed.fasta \t Fasta table with renamed ASV names    \n" >> $readme_file
+    #printf  "${file3_name}__renamed.fasta \t Fasta table with renamed ASV names    \n" >> $readme_file #??? nec
     printf  "${file3_name}__community.RData \t RData community table, rows - sample, columns - ASVs  \n" >> $readme_file
     printf  "${file3_name}__diagnosis_plots_assignment.pdf \t Diagnositic plots to check controls and assignments \n" >> $readme_file
-    printf  "${file3_name}__taxonomy_info.tsv \t Taxonomic feedback from ObiTools4 for each ASV \n" >> $readme_file
+    printf  "${file3_name}_diagnosis_figures/ \t Folder with diagnostic plots to check samples and controls saved as independent file \n" >> $readme_file
+    printf  "${file3_name}__taxonomy_info.tsv \t Taxonomic feedback from ObiTools4 for each ASV  includes also new ID names \n" >> $readme_file
     printf  "${file3_name}__taxonomy_info_COMPLETE.tsv \t Taxonomic feedback from ObiTools4 including NCBI taxdump information with new & old ID names\n" >> $readme_file
     printf  "${file3_name}__taxonomy_SPECIES_summary.tsv \t Taxonomic feedback to each NCBI taxID containing NCBI taxdump information\n" >> $readme_file   
 fi
 now=$(date)
 printf "\nDate stoped: \t $now \n" >> $readme_file
 
-
+exit
 ######################################################################################################################################
 ######################################################### Produce File statistics ####################################################
 ######################################################################################################################################
@@ -359,12 +426,40 @@ for file in $( ls $output/*.fasta ); do
     # Extract the file extension
     extension="${filename##*.}"
     
-    #Calulcate seq length
-    seq_length=$( awk '/^>/ {if (seqlen){print seqlen; seqlen=0}} !/^>/ {seqlen += length($0)} END {if (seqlen) print seqlen}'\
-                        $file | awk '{total += $1; count++} END {print total/count}' )
-    #Create Output
-    printf "$filename \t $seq_length \t" >> $stats_file
-    obi4_obicount -v -r $file >> $stats_file
+    #Calulcate sequence length
+    seq_length=0
+    if [[ "$extension" == "fasta" || "$extension" == "fa" ]]; then
+        seq_length=$(
+            zcat "$file" \
+            | awk '/^>/ { if (seqlen) { print seqlen; seqlen=0 } next } { seqlen += length($0) } END { if (seqlen) print seqlen }' \
+            | awk '{ total += $1; count++ } END { if (count) print total/count }'
+        )
+    else
+        seq_length=$(
+            zcat "$file" \
+            | awk 'NR%4==2 { total += length($0); count++ } END { if (count) print total/count }'
+        )
+    fi
+
+    # calculate read number
+    obi4_obicount -v -r "$file" > "$output/stats_storage.txt"
+    variants=$(awk -F',' 'NR==2 {print $2}' "$output/stats_storage.txt")
+    reads=$(awk -F',' 'NR==3 {print $2}' "$output/stats_storage.txt")
+    rm -f "$output/stats_storage.txt"
+
+    # Create Output
+    printf '%s\t%s\t%s\t%s\n' "$filename" "$seq_length" "$variants" "$reads" >> "$stats_file"
+
 done
 printf  "$stats_file \t Stats for every ObiTools Step to ASV & Reads   \n" >> $readme_file
 
+######################################################################################################################################
+
+end=$(date)
+echo "Finished: the magic is done"
+echo "The analysis started : $start"
+echo "The analysis started : $start">> $readme_file
+echo "The indexing ended (0 if indexing was not requiered): $index_time"
+echo "The indexing ended (0 if indexing was not requiered): $index_time">> $readme_file
+echo "The analysis finished: $end"
+echo "The analysis finished: $end" >> $readme_file

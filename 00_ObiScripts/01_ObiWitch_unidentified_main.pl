@@ -84,4 +84,4 @@ while (defined( my $line= <$FH>)) {
 }
 
 # execute R script to visualize the results
-system("Rscript 02_diagnosis_unidentified.R $output_file")
+system("01_ObiWitch_unidentified_diagnostic.R $output_file")

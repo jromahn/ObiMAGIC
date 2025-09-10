@@ -4,9 +4,10 @@ echo "$(realpath $0) $*"
 
 ########################################################################################################
 # ObiTools4 Script for Metabarcoding --> ObiWitch
-# Pipeline written by Juliane Romahn ( email: romahnjuliane@gmail.com)
+# Pipeline written by Juliane Romahn 
 # version: "0.1" - 05.03.2025
-version="0.1"
+# version: "0.2" - 25.08.2025 - add obicsv & obmatrix to the pipeline, stats only working with Obitools 4.4 or higher
+version="0.2"
 ###################################################
 
 #declare ARGV variables saved as default to overwrite config
@@ -162,6 +163,8 @@ printf "Thread number : \t $threads\n" >> $readme_file
 printf "OBiWitch Version: \t $version\n" >> $readme_file
 printf "OBiTools4 Version: \t" >> $readme_file
 obi4_obiannotate --version &>> $readme_file
+printf "Path of the ObiTools4 : \t " >> $readme_file
+which obi4_obiannotate  >> $readme_file
 printf "Using new temporary directory: \t $TMPDIR \n" >> $readme_file
 echo "" >> $readme_file
 
@@ -207,20 +210,26 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     output_path="$output/01_demultiplexed_all"
     output_unknown="$output/01_unidentified"
     base_name=$(basename "$new_ngsfile" .tsv)
-    output_file1="$output/${base_name}_forward.fasta"
-    output_file2="$output/${base_name}_reverse.fasta"
+    output_file1_F="$output/${base_name}_forward.fasta"
+    output_file1_R="$output/${base_name}_reverse.fasta"
+    output_file2_F="$output/${base_name}_PRIMERforward.fasta"
+    output_file2_R="$output/${base_name}_PRIMERreverse.fasta"
 
     # Ensure output files are empty
-    > "$output_file1"
-    > "$output_file2"
+    > "$output_file1_F"
+    > "$output_file1_R"
+    > "$output_file2_F"
+    > "$output_file2_R"
 
     ## create new folders
     mkdir -p $output_path
     mkdir -p $output_unknown
 
     #declare boolean "hash"
-    declare -A seen_forward
-    declare -A seen_reverse
+    declare -A seen_forward_tag
+    declare -A seen_reverse_tag
+    declare -A seen_forward_primer
+    declare -A seen_reverse_primer
 
     # Read the ngs file line by line, save unique tags and primer combination for cutadapt
     while IFS= read -r line; do
@@ -231,24 +240,30 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
 
         # Extract the third column (before and after the colon) -- tags , the fourth -- forward primer, and the fifth columns -- reverse primer
         sample=$(echo "$line" | awk '{print $2}')
-        third_col_before=$(echo "$line" | awk '{split($3, a, ":"); print a[1]}')
-        third_col_after=$(echo "$line" | awk '{split($3, a, ":"); print a[2]}')
-        fourth_col=$(echo "$line" | awk '{print $4}')
-        fifth_col=$(echo "$line" | awk '{print $5}')
+        tag_forward=$(echo "$line" | awk '{split($3, a, ":"); print a[1]}')
+        tag_reverse=$(echo "$line" | awk '{split($3, a, ":"); print a[2]}')
+        primer_forward=$(echo "$line" | awk '{print $4}')
+        primer_reverse=$(echo "$line" | awk '{print $5}')
         
-        #combine tag and primer
-        forward="${third_col_before}${fourth_col}"
-        reverse="${third_col_after}${fifth_col}"
-        
+        #create tag files    
         # append to respective output files if not already known
-        if  [[ -z ${seen_forward[$forward]} ]];then
+        if  [[ -z ${seen_forward_tag[$tag_forward]} ]];then
             #echo $forward
-            printf ">$forward\n$forward\n" >> "$output_file1"  
-            seen_forward[$forward]=1
+            printf ">$tag_forward\n$tag_forward\n" >> "$output_file1_F"  
+            seen_forward_tag[$tag_forward]=1
         fi
-        if  [[ -z ${seen_reverse[$reverse]} ]];then
-            printf ">$reverse\n$reverse\n" >> "$output_file2"    
-            seen_reverse[$reverse]=1
+        if  [[ -z ${seen_reverse_tag[$tag_reverse]} ]];then
+            printf ">$tag_reverse\n$tag_reverse\n" >> "$output_file1_R"    
+            seen_reverse_tag[$tag_reverse]=1
+        fi
+        #create primer files
+        if  [[ -z ${seen_forward_primer[$primer_forward]} ]];then
+            printf ">$primer_forward\n$primer_forward\n" >> "$output_file2_F"    
+            seen_forward_primer[$primer_forward]=1
+        fi
+        if  [[ -z ${seen_reverse_primer[$primer_reverse]} ]];then
+            printf ">$primer_reverse\n$primer_reverse\n" >> "$output_file2_R"    
+            seen_reverse_primer[$primer_reverse]=1
         fi
     done < "$new_ngsfile"
 
@@ -256,27 +271,66 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     printf "cutadapt Version: \t" >> $readme_file
     cutadapt --version &>> $readme_file
 
-    #demultiplex with cutadapt ( minimum length is 10!!!)
-    command="cutadapt -e $mismatches --no-indels --minimum-length 10 --cores $threads -g file:${output_file1} -G file:${output_file2}  \
-        -o $output_path/{name1}-{name2}.1.fastq.gz -p $output_path/{name1}-{name2}.2.fastq.gz \
+    ###########
+    # demultiplex with cutadapt ( minimum length is 10!!!)
+
+    #1.) tags no mistmatch allowed
+    command="cutadapt -e 0 --no-indels --minimum-length 10 --revcomp --cores $threads -g file:${output_file1_F} -G file:${output_file1_R}  \
+        -o $output_path/{name1}-{name2}_tags.1.fastq.gz -p $output_path/{name1}-{name2}_tags.2.fastq.gz \
         $read1 $read2"
 
     echo $command
-    $command
+    $command 
 
+    #### cleaning folder after first time - cutadapt
     # remove empty files
     for file in $( ls $output_path/*fastq.gz ); do if [[ $(zcat $file | head | wc -l) -eq 0  ]]; then  rm $file ; fi ; done
     sleep 1
 
     if [[ $(ls $output_path/ | wc -l) -eq 0  ]]; then
-	echo "No files! Sample demultiplexing was not successful. Check the NGS demultiplexing file."
-	exit 4
+        echo "No files! Sample demultiplexing was not successful. Check the NGS demultiplexing file."
+        exit 4
+    fi
+
+    #mv unidentified tags
+    mv $file $output_path/*unknown*.fastq.gz $output_unknown
+
+    ###########
+    # 2.) remove primer sequence with mismatches allowed
+    for cutadapt_file in $output_path/*_tags.1.fastq.gz; do
+        fname=$(basename "$cutadapt_file" "_tags.1.fastq.gz")   # strip suffix
+        name1=${fname%%-*}                          # part before first dash
+        name2=${fname#*-}                           # part after first dash
+
+        #old filenames
+        file1="$output_path/$name1-${name2}_tags.1.fastq.gz"
+        file2="$output_path/$name1-${name2}_tags.2.fastq.gz"
+
+
+        command="cutadapt -e $mismatches --no-indels --minimum-length 10 --revcomp --cores $threads -g file:${output_file2_F} -G file:${output_file2_R}  \
+        -o $output_path/$name1{name1}-$name2{name2}.1.fastq.gz -p $output_path/$name1{name1}-$name2{name2}.2.fastq.gz \
+        $file1 $file2"
+
+        echo $command
+        $command 
+
+    done
+
+    #### cleaning folder after second time - cutadapt
+    # remove empty files
+    for file in $( ls $output_path/*fastq.gz ); do if [[ $(zcat $file | head | wc -l) -eq 0  ]]; then  rm $file ; fi ; done
+    sleep 1
+
+    if [[ $(ls $output_path/ | wc -l) -eq 0  ]]; then
+        echo "No files! Sample demultiplexing was not successful. Check the NGS demultiplexing file."
+        exit 4
     fi
 
     #mv unidentified tags
     mv $file $output_path/*unknown*.fastq.gz $output_unknown
 fi 
 
+#exit
 ######################################################################################################################################
 ###### Merge/ Recover full sequence reads from forward and reverse partial reads
 ######################################################################################################################################
@@ -312,8 +366,8 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         sleep 1
 
         #remove existing files
-        rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.1.fastq.gz"
-        rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.2.fastq.gz"
+        #rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.1.fastq.gz"
+        #rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.2.fastq.gz"
 
         #add new line character
         echo "" | gzip - | cat - >> $output_known/$sample.fastq.gz
@@ -457,7 +511,8 @@ fi
 if  [ "$FLAG_DEMULTI_FIRST" == "FALSE"  ]; then 
 
     if  [  $( stat -c%s "$output/03_demultiplexed.fastq.gz" ) -eq 0  ];then 
-        printf "CAUTION! \t $output/03_demultiplexed.fastq.gz  \t is empty Something went wrong while demultiplexing.\n"
+        printf "CAUTION! \t $output/03_demultiplexed.fastq.gz  \t is empty \n "
+        printf "CAUTION! \t Something went wrong while demultiplexing.\n"
         printf "CAUTION! \t Do you have the correct primer sequences in the demultiplex file?!?! \n"
 
         # create file for error searching
@@ -491,7 +546,7 @@ fi
 
 
 ######################################################################################################################################
-###### dereplicate reads into uniq sequences --> ASVs
+###### dereplicate reads into uniq sequences 
 ######################################################################################################################################
 if  [ ! -f $output/04_dereplicated.fasta.gz ]; then 
     if  [ -f $step4_file ] && [ $( stat -c%s $step4_file  ) -gt 0 ]; then
@@ -547,14 +602,16 @@ fi
 ######################################################################################################################################
 
 ####### Create stats about toal ASV and read number
-echo "Create stats about toal ASV and read number - after dereplication"
+echo "Create stats about total ASV and read number - after dereplication"
 printf "#Stats of singletons, low and high abundant ASVs\t\n" > $readme_file_stats
-printf  "05_dereplicated.fasta.gz \t Total reads: \t">> $readme_file_stats
-obi4_obicount -r $output/05_dereplicated.fasta.gz >> $readme_file_stats
-printf  "05_dereplicated.fasta.gz \t Total ASVs: \t">> $readme_file_stats
-obi4_obicount -v $output/05_dereplicated.fasta.gz >> $readme_file_stats
-echo "" >> $readme_file_stats
-echo ""
+
+obi4_obicount -v -r $output/05_dereplicated.fasta.gz > $output/"stats_storage.txt"
+variants=$(awk -F',' 'NR==2 {print $2}' $output/"stats_storage.txt")
+reads=$(awk -F',' 'NR==3 {print $2}' $output/"stats_storage.txt")
+#print
+printf  "05_dereplicated.fasta.gz\tTotal\tReads:\t$reads\n">> $readme_file_stats
+printf  "05_dereplicated.fasta.gz\tTotal\tASVs:\t$variants\n">> $readme_file_stats
+
 
 file1="" # denoised
 file2=6  # clean
@@ -593,33 +650,46 @@ fi
 ####### Create stats about toal ASV and read number
 echo "Create stats about toal ASV and read number - after denoising"
 
-#general
 #printf "#Stats of singletons, low and high abundant ASVs\t$file1\n" >> $readme_file_stats
-printf  "$file1 \t Total reads: \t">> $readme_file_stats
-obi4_obicount -r $output/$file1 >> $readme_file_stats
-printf  "$file1 \t Total ASVs: \t">> $readme_file_stats
-obi4_obicount -v $output/$file1 >> $readme_file_stats
+
+#general
+obi4_obicount -r -v $output/$file1 > $output/"stats_storage.txt"
+# read the second line for variants and third for reads
+variants=$(awk -F',' 'NR==2 {print $2}' $output/"stats_storage.txt")
+reads=$(awk -F',' 'NR==3 {print $2}' $output/"stats_storage.txt")
+#print
+printf  "$file1\tTotal\tReads:\t$reads\n">> $readme_file_stats
+printf  "$file1\tTotal\tASVs:\t$variants\n">> $readme_file_stats
+
 
 ## more than 10
-echo "" >> $readme_file_stats
-printf  "$file1 \t Count >=10 Reads: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() >= 10' $output/$file1 | obi4_obicount -r >> $readme_file_stats
-printf  "$file1 \t Count >=10 ASVs: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() >= 10' $output/$file1 | obi4_obicount -v >> $readme_file_stats
+obi4_obigrep -p 'sequence.Count() >= 10' $output/$file1 | obi4_obicount -r -v > $output/"stats_storage.txt"
+# read the second line for variants and third for reads
+variants=$(awk -F',' 'NR==2 {print $2}' $output/"stats_storage.txt")
+reads=$(awk -F',' 'NR==3 {print $2}' $output/"stats_storage.txt")
+#print
+printf  "$file1\tCount >=10\tReads:\t$reads\n">> $readme_file_stats
+printf  "$file1\tCount >=10\tASVs:\t$variants\n">> $readme_file_stats
 
 ## less than 10
-printf  "$file1 \t Count <10 Reads: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() < 10' $output/$file1 | obi4_obicount -r >> $readme_file_stats
-printf  "$file1 \t Count <10 ASVs: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() < 10' $output/$file1 | obi4_obicount -v >> $readme_file_stats
+obi4_obigrep -p 'sequence.Count() < 10' $output/$file1 | obi4_obicount -r -v > $output/"stats_storage.txt"
+# read the second line for variants and third for reads
+variants=$(awk -F',' 'NR==2 {print $2}' $output/"stats_storage.txt")
+reads=$(awk -F',' 'NR==3 {print $2}' $output/"stats_storage.txt")
+#print
+printf  "$file1\tCount <10\tReads:\t$reads\n">> $readme_file_stats
+printf  "$file1\tCount <10\tASVs:\t$variants\n">> $readme_file_stats
 
 ## Singletons
-echo "" >> $readme_file_stats
-printf  "$file1 \t Singleton Reads: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() == 1' $output/$file1 | obi4_obicount -r >> $readme_file_stats
-printf  "$file1 \t Singleton ASVs: \t">> $readme_file_stats
-obi4_obigrep -p 'sequence.Count() == 1' $output/$file1 | obi4_obicount -v >> $readme_file_stats
+obi4_obigrep -p 'sequence.Count() == 1' $output/$file1 | obi4_obicount -r -v > $output/"stats_storage.txt"
+# read the second line for variants and third for reads
+variants=$(awk -F',' 'NR==2 {print $2}' $output/"stats_storage.txt")
+reads=$(awk -F',' 'NR==3 {print $2}' $output/"stats_storage.txt")
+#print
+printf  "$file1\tSingleton\tReads:\t$reads\n">> $readme_file_stats
+printf  "$file1\tSingleton\tASVs:\t$variants\n">> $readme_file_stats
 
+rm $output/"stats_storage.txt"
 
 spaceholder=$( basename $readme_file_stats )
 echo "" >> $readme_file
@@ -702,33 +772,107 @@ echo "Generate the final fasta file"
 
 printf  "\n#Extra Step \t  Additional Files & statistics \n" >> $readme_file
 
+######################################################################################################################################
+## new for version 0.2 adding obicsv and obimatrix
+file3_name=$( basename $file3 .fasta )
+file4="${file3_name}__matrix.csv"
 
+#save for each ID the 
+obi4_obicsv $output/$file2 -o $output/${file3_name}__general_infos.csv --fasta --count --id -d -q -k merged_sample --sequence
+obi4_obimatrix $output/$file3 > $output/$file4
+
+
+printf  "${file3_name}__general_infos.csv, \t General information of sequences/ASVs provided by ObiTools4 including original SV names\n" >> $readme_file ##
+printf  "$file4, \t Community matrix, with replicate names in "id" column and original ASV names as columns each\n" >> $readme_file ##
+
+
+#exit
 ######################################################################################################################################
 ############################################################ Diagnosis plot ##########################################################
 ######################################################################################################################################
 
-if [ -f $output/$file3 ] && [ $( stat -c%s $output/$file3 ) -gt 0 ]; then
+if [ -f $output/$file4 ] && [ $( stat -c%s $output/$file4 ) -gt 0 ]; then
     file3=$( basename $file3 )
     new_ngsfile=$( basename $new_ngsfile )
 
-    echo "TMPDIR=\"$new_temp\" 01_ObiWitch_diagnostic.R $output $file3 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)"
-    TMPDIR="$new_temp" 01_ObiWitch_diagnostic.R $output $file3 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)
+    echo "TMPDIR=\"$new_temp\" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)"
+    TMPDIR="$new_temp" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)
 
     file3_name=$( basename $file3 .fasta )
 
 
     echo  "" >> $readme_file
     printf  "${file3_name} \t ASVs are renamed in this step and shorten   \n" >> $readme_file
-    printf  "${file3_name}__renamed_sequences.fasta \t Fasta file with renamed ASVs for further assignment in mothur & BOLDdigger \n" >> $readme_file
     printf  "${file3_name}__mothur_counttable.csv \t Count table with renamed ASVs for further assignment in mothur  \n" >> $readme_file
-    printf  "${file3_name}__general_infos.csv, \t General information of sequences/ASVs provided by ObiTools4 including original and new ASV names\n" >> $readme_file
     printf  "${file3_name}__community.RData \t RData community table, rows - sample, columns - ASVs (new ASV names!)  \n" >> $readme_file
-    printf  "${file3_name}__diagnosis_plots_bioinformatics.pdf \t First diasgnosis plots to check samples and controls \n" >> $readme_file
+    printf  "${file3_name}__diagnosis_plots_bioinformatics.pdf \t First diasgnostic plots to check samples and controls \n" >> $readme_file
+    printf  "${file3_name}_diagnosis_figures/ \t Folder with diasgnostic plots to check samples and controls saved as independent file \n" >> $readme_file
+    printf  "${file3_name}__diagnosic_figures.pdf \t Folder of first diasgnosis plots to check samples and controls saved as single files\n" >> $readme_file
+    ### the renaming file
 
     if [ ! -f "$output/${file3_name}__diagnosis_plots_bioinformatics.pdf" ] || [ $( stat -c%s "$output/${file3_name}__diagnosis_plots_bioinformatics.pdf" ) -eq 0 ]; then
         echo "$output/${file3_name}__diagnosis_plots_bioinformatics.pdf can not be found"
         exit 14
     fi
+    #08_BiodivSoup_trail_final__renamePattern.tsv
+
+    #rename ASVs for everything
+    if [ -f "$output/${file3_name}__renamePattern.tsv" ] ; then
+        
+        ## save naming pattern in dictonary and replace in fasta file ( also remove metadata from each fasta header)
+        awk -F'\t' '
+                    NR==FNR {
+                        if (FNR==1 && $1=="id") next            # skip TSV header
+                        sub(/\r$/,"",$1); sub(/\r$/,"",$2)      # strip CR if present
+                        map[$1]=$2
+                        next
+                    }
+                    /^>/ {
+                        # take the first token after ">"
+                        split(substr($0,2), a, /[ \t]/)
+                        old=a[1]
+                        if (old in map) {
+                        print ">" map[old]
+                        } else {
+                        print "ERROR: ID \"" old "\" not found in mapping file!" > "/dev/stderr"
+                        exit 99
+                        }
+                        next
+                    }
+                    { print }
+                    ' "$output/${file3_name}__renamePattern.tsv" "$output/$file3" > "$output/${file3_name}__renamed_sequences.fasta"
+
+
+        printf  "${file3_name}__renamed_sequences.fasta \t Fasta file with renamed ASVs for further assignment in mothur & BOLDdigger \n" >> $readme_file 
+
+
+        ### add also new ids to 
+
+        awk -F'\t' 'NR==FNR {
+            if (FNR==1 && $1=="id") next       # skip TSV header
+            map[$1]=$2
+            next
+        }
+        BEGIN { OFS="," }
+        FNR==1 {
+            print $0, "id_new"                 # add header column
+            next
+        }
+        {
+            id=$1
+            if (id in map) {
+                print $0, map[id]
+            } else {
+                print "ERROR: id \"" id "\" not found in mapping file!" > "/dev/stderr"
+                exit 99
+            }
+        }' "$output/${file3_name}__renamePattern.tsv" FS=',' $output/${file3_name}__general_infos.csv > $output/${file3_name}__general_infos_updated.csv
+
+        mv $output/${file3_name}__general_infos_updated.csv $output/${file3_name}__general_infos.csv
+
+        printf  "${file3_name}__general_infos.csv, \t added also new IDs to it \n" >> $readme_file ##
+    fi
+
 
 fi
 now=$(date)
@@ -743,7 +887,7 @@ printf "\nDate stoped: \t $now \n" >> $readme_file
 
 echo "Calulcate File statistics"
 printf "#ObiTools4 Stats \t \n" > $stats_file
-printf "#Filename\tAverage.Amplicon.Length \tTOTAL.ASVs TOTAL.Reads\n" >> $stats_file
+printf "#Filename\tAverage.Amplicon.Length\tTOTAL.ASVs\tTOTAL.Reads\n" >> $stats_file
 
 #create list of all files of interest
 outputfiles=$(find "$output" -type f -maxdepth 1 \( -name "*.fastq.gz" -o -name "*.fasta.gz" -o -name "*.fasta" \) ! -name "*ngsfile*" ! -name "*renamed*" | sort)
@@ -761,24 +905,28 @@ for file in $outputfiles; do
     #Calulcate sequence length
     seq_length=0
     if [[ "$extension" == "fasta" || "$extension" == "fa" ]]; then
-        seq_length=$( awk '/^>/ {if (seqlen){print seqlen; seqlen=0}} !/^>/ {seqlen += length($0)} END {if (seqlen) print seqlen}'\
-                        $file | awk '{total += $1; count++} END {print total/count}' )
+        seq_length=$(
+            zcat "$file" \
+            | awk '/^>/ { if (seqlen) { print seqlen; seqlen=0 } next } { seqlen += length($0) } END { if (seqlen) print seqlen }' \
+            | awk '{ total += $1; count++ } END { if (count) print total/count }'
+        )
     else
-        # get extension without gz
-        filename2=$(basename $file .gz)
-        extension="${filename2##*.}"
-
-        if [[ "$extension" == "fasta" || "$extension" == "fa" ]]; then
-            seq_length=$( zcat $file | awk '/^>/ {if (seqlen){print seqlen; seqlen=0}} !/^>/ {seqlen += length($0)} END {if (seqlen) print seqlen}'\
-                         | awk '{total += $1; count++} END {print total/count}' )
-        else
-            seq_length=$( zcat $file | awk 'NR%4==2 { total += length($0); count++ } END { print total/count }')
-        fi
-        
+        seq_length=$(
+            zcat "$file" \
+            | awk 'NR%4==2 { total += length($0); count++ } END { if (count) print total/count }'
+        )
     fi
-    #Create Output
-    printf "$filename \t $seq_length \t" >> $stats_file
-    obi4_obicount -v -r $file >> $stats_file
+
+    # calculate read number
+    obi4_obicount -v -r "$file" > "$output/stats_storage.txt"
+    variants=$(awk -F',' 'NR==2 {print $2}' "$output/stats_storage.txt")
+    reads=$(awk -F',' 'NR==3 {print $2}' "$output/stats_storage.txt")
+    rm -f "$output/stats_storage.txt"
+
+    # Create Output
+    printf '%s\t%s\t%s\t%s\n' "$filename" "$seq_length" "$variants" "$reads" >> "$stats_file"
+
+
 done
 printf  "$stats_file \t Stats for every ObiTools Step to ASV & Reads   \n" >> $readme_file
 

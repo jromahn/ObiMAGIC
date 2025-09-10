@@ -6,6 +6,8 @@ __Mandatory executables:__
   - `obi4_obimultiplex`
   - `obi4_obiuniq`
   - `obi4_obicount`
+  - `obi4_obicsv`
+  - `obi4_obimatrix`
   - `obi4_obiannotate`
   - `obi4_obiclean`
   - `obi4_obipcr`
@@ -18,9 +20,13 @@ __Mandatory executables:__
   - `perl`
   - `Cwd 'abs_path'`
   - `File::Basename`
+  - `File::Find`
   - `IO::Zlib`
   - `IPC::Cmd qw[can_run run]`
   - `List::MoreUtils qw(uniq)`
+  - `Encode qw(encode)`
+  - `Text::Iconv`
+  - `Spreadsheet::XLSX`
 - [R](https://cran.r-project.org/) and R libraries:
   - `Rscript`
   - `jsonify`
@@ -31,7 +37,6 @@ __Mandatory executables:__
   - `ghibli`
   - `magrittr`
   - `plotly`
-  - `ROBIFastread`
   - `seqinr`
   - `taxize`
   - `taxonomizr`
