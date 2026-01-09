@@ -134,7 +134,7 @@ obirank_level= c("no rank","superkingdom", "kingdom", "clade","class","subclass"
 ncbi_taxonomy <- function(unique_assigned){
   unique_assigned <- unique(unique_assigned)
   rank_information <- getTaxonomy(unique_assigned, sqlFile, 
-                                  desiredTaxa = c("species","genus","family","order","class", "subphylum" ,"phylum", "kingdom","superkingdom"))
+                                  desiredTaxa = c("species","genus","subfamily","family","superfamily","suborder","order","subclass","class", "subphylum" ,"phylum", "kingdom","domain"))
   rank_information <- data.frame(rank_information)
   rank_information$taxID <- unique_assigned
   return(rank_information)

@@ -5,6 +5,7 @@
 # Pipeline written by Tilman Schell  
 # version: "0.1" - 05.03.2025
 # version: "0.2" - 23.08.2025 by Juliane Romahn: remove few errors
+# version: "0.3" - 18.12.2025 by Tilman Schell: remove few errors
 
 use strict;
 use warnings;
@@ -53,6 +54,7 @@ my @dependencies = (
 	#external dependencies
 	"Rscript",
 	"pigz",
+	"dos2unix",
 	"obi4_obiannotate",
 	"obi4_obipairing",
 	"obi4_obigrep",
@@ -505,6 +507,9 @@ else{
 }
 exe_cmd($cmd,$verbose,$dry);
 
+$cmd = "dos2unix $out_dir/$project.ngs";
+exe_cmd($cmd,$verbose,$dry);
+
 ######## concatenate or link fastq files
 my @forward;
 my @reverse;
@@ -554,8 +559,7 @@ if($keep_tmp == 0){
 
 #split demultiplexed files
 #not submitted via slurm
-my $final_fasta= find_file("${project}_final.fasta","${project}_results/");# 1.) pattern 2.) path
-$cmd = "02_ObiHelp_split_samples.pl $final_fasta $project\_results/00_$project\__ngsfile.tsv";
+$cmd = "02_ObiHelp_split_samples.pl $project\_results/08_$project\_final.fasta $project\_results/00_$project\__ngsfile.tsv";
 #if($slurm == 1){
 #	$cmd = "sbatch --job-name=$project\_demux $slurm_opts --wrap=\"$cmd\"";
 #}
@@ -563,7 +567,7 @@ exe_cmd($cmd,$verbose,$dry);
 
 ###
 # extract the leading number and increment it
-my $filename_fasta = basename($final_fasta);   # "09_BiodivSoup_final__FolDegenRev.fasta"
+my $filename_fasta = basename("$project\_results/08_$project\_final.fasta");   # "09_BiodivSoup_final__FolDegenRev.fasta"
 #print $filename_fasta, "\n";
 $filename_fasta =~ m/(\d+)_/;   # capture digits before the first "_"
 my $num = $1;
@@ -592,7 +596,7 @@ else{
 #print "@files\n";
 #exit;
 #create a obiwizard config file for each file resulting from demultiplexing e.g. for each primer
-print "create a obiwizard config file for each file resulting from demultiplexing e.g. for each primer\n";
+print STDERR "INFO\tCreateing obiwizard config file(s) for each file resulting from demultiplexing e.g. for each primer\n";
 #print "@files\n";
 my %configs;
 if($dry == 0){
@@ -616,7 +620,8 @@ else{
 #run obiwizard
 if($slurm == 1){
 	my $array_end = scalar(keys(%configs));
-	$cmd = "sbatch --job-name=$project\_obiwizard $slurm_opts --array=1-$array_end --wait --wrap=\"00_ObiMAGIC_obiwizard_jobarray.sh $out_dir\"";
+	my $obiwizard_config_input = join(" ",values(%configs));
+	$cmd = "sbatch --job-name=$project\_obiwizard $slurm_opts --array=1-$array_end --wait --wrap=\"00_ObiMAGIC_obiwizard_jobarray.sh $obiwizard_config_input\"";
 	exe_cmd($cmd,$verbose,$dry);
 }
 else{

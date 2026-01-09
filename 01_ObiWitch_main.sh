@@ -7,7 +7,8 @@ echo "$(realpath $0) $*"
 # Pipeline written by Juliane Romahn 
 # version: "0.1" - 05.03.2025
 # version: "0.2" - 25.08.2025 - add obicsv & obmatrix to the pipeline, stats only working with Obitools 4.4 or higher
-version="0.2"
+# version: "0.3" - 15.12.2025 - solve cutadapt issue
+version="0.3"
 ###################################################
 
 #declare ARGV variables saved as default to overwrite config
@@ -210,8 +211,8 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     output_path="$output/01_demultiplexed_all"
     output_unknown="$output/01_unidentified"
     base_name=$(basename "$new_ngsfile" .tsv)
-    output_file1_F="$output/${base_name}_forward.fasta"
-    output_file1_R="$output/${base_name}_reverse.fasta"
+    output_file1_F="$output/${base_name}_TAGforward.fasta"
+    output_file1_R="$output/${base_name}_TAGreverse.fasta"
     output_file2_F="$output/${base_name}_PRIMERforward.fasta"
     output_file2_R="$output/${base_name}_PRIMERreverse.fasta"
 
@@ -293,7 +294,9 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     fi
 
     #mv unidentified tags
-    mv $file $output_path/*unknown*.fastq.gz $output_unknown
+    #mv $file $output_path/*unknown*.fastq.gz $output_unknown
+    mv $output_path/*unknown*.fastq.gz $output_unknown
+
 
     ###########
     # 2.) remove primer sequence with mismatches allowed
@@ -306,15 +309,41 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         file1="$output_path/$name1-${name2}_tags.1.fastq.gz"
         file2="$output_path/$name1-${name2}_tags.2.fastq.gz"
 
-
-        command="cutadapt -e $mismatches --no-indels --minimum-length 10 --revcomp --cores $threads -g file:${output_file2_F} -G file:${output_file2_R}  \
-        -o $output_path/$name1{name1}-$name2{name2}.1.fastq.gz -p $output_path/$name1{name1}-$name2{name2}.2.fastq.gz \
+        ## check forward direction for primers 
+        command="cutadapt -e $mismatches --no-indels --minimum-length 10 --cores $threads -g file:${output_file2_F} -G file:${output_file2_R}  \
+        -o $output_path/$name1{name1}-$name2{name2}_1.1.fastq.gz -p $output_path/$name1{name1}-$name2{name2}_1.2.fastq.gz \
         $file1 $file2"
 
         echo $command
         $command 
 
+        # check the other direction /reverse complement?
+        command="cutadapt -e $mismatches --no-indels --minimum-length 10 --cores $threads -g file:${output_file2_F} -G file:${output_file2_R}  \
+        -o $output_path/$name2{name1}-$name1{name2}_2.1.fastq.gz -p $output_path/$name2{name1}-$name1{name2}_2.2.fastq.gz \
+         $file2 $file1"
+
+        echo $command
+        $command 
+
+    
     done
+
+    ##concat since both are same direction, if empty the revcomp one move/rename the other
+    for cutadapt_file in $output_path/*_1.1.fastq.gz; do
+        fname=$(basename "$cutadapt_file" "_1.1.fastq.gz")   # strip suffix
+
+        if [[ -f $output_path/${fname}_2.1.fastq.gz ]]; then
+
+            cat $output_path/${fname}_1.1.fastq.gz $output_path/${fname}_2.1.fastq.gz > $output_path/${fname}.1.fastq.gz
+            cat $output_path/${fname}_1.2.fastq.gz $output_path/${fname}_2.2.fastq.gz > $output_path/${fname}.2.fastq.gz
+
+        else
+            mv $output_path/${fname}_1.1.fastq.gz $output_path/${fname}.1.fastq.gz
+            mv $output_path/${fname}_1.2.fastq.gz $output_path/${fname}.2.fastq.gz
+        fi 
+
+    done
+        
 
     #### cleaning folder after second time - cutadapt
     # remove empty files
@@ -354,26 +383,26 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         reverse_primer=$(echo "$line" | awk '{print $5}')
     
         #test if both files exists
-        if [[ -f $output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.1.fastq.gz && -f $output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.2.fastq.gz ]]; then 
-        echo $sample 
-        #execute the merging
-        echo "$output_path - $sample" 
-        printf "$forward_tag$forward_primer\t$reverse_tag$reverse_primer\t$sample\n" >> $LOG_mergin
+        if [[ -f $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz && -f $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz ]]; then 
+            echo $sample 
+            #execute the merging
+            echo "$output_path - $sample" 
+            printf "$forward_tag$forward_primer\t$reverse_tag$reverse_primer\t$sample\n" >> $LOG_mergin
 
-        obi4_obipairing --max-cpu $threads --compress --min-overlap=10 -F "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.1.fastq.gz" \
-            -R "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.2.fastq.gz" >  "$output_known/$sample.fastq.gz" 
-        
-        sleep 1
+            # first forward direction
+            echo "obi4_obipairing --max-cpu $threads --compress --min-overlap=10 -F $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz \
+                -R $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz >  $output_known/${sample}.fastq.gz"
 
-        #remove existing files
-        #rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.1.fastq.gz"
-        #rm  "$output_path/$forward_tag$forward_primer-$reverse_tag$reverse_primer.2.fastq.gz"
+            obi4_obipairing --max-cpu $threads --compress --min-overlap=10 -F "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz" \
+                -R "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz" >  "$output_known/${sample}.fastq.gz" 
+            
+            sleep 1
 
-        #add new line character
-        echo "" | gzip - | cat - >> $output_known/$sample.fastq.gz
+            #add new line character
+            echo "" | gzip - | cat - >> $output_known/$sample.fastq.gz
           
-        # unzipped change header and add sample name
-        zcat $output_known/$sample.fastq.gz  | awk -v name="$sample" 'NR%4==1 {sub(/\}$/, ",\"sample\":\""name"\"}");} {print}'| gzip  > $output_known/$sample.merged.obi4.fastq.gz
+            # unzipped change header and add sample name
+            zcat $output_known/$sample.fastq.gz  | awk -v name="$sample" 'NR%4==1 {sub(/\}$/, ",\"sample\":\""name"\"}");} {print}'| gzip  > $output_known/$sample.merged.obi4.fastq.gz
 
         fi 
     done < $new_ngsfile
@@ -388,7 +417,7 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         #echo $file
         cat $file >> $merged_file
         sleep 1
-        rm $file
+        #rm $file
     done
     #exit
 
