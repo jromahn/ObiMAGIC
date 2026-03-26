@@ -122,7 +122,7 @@ plot_theme <- theme_light() +
         panel.grid = element_line(color = "grey78", linewidth = 0.08))
 
 ## define colors
-colors <- c("#104E8B", "#1F83B4FF", "#12A2A8FF", "#78A641FF", "#BCBD22FF", "#FFAA0EFF", "#FF7F0EFF", "#BA43B4FF",  "#6F63BBFF","#746455")
+colors <- c("#1F83B4FF", "#12A2A8FF", "#78A641FF", "#BCBD22FF", "#FFAA0EFF", "#FF7F0EFF", "#BA43B4FF",  "#6F63BBFF","#746455")
 
 
 ####################################       FUNCTIONS      #####################################
