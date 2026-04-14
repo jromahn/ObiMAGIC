@@ -1,11 +1,10 @@
-#!/usr/bin/nev perl
+#!/usr/bin/env perl
 
 use strict;
 use warnings;
 use utf8;  # Ensure the script itself is treated as UTF-8
 use open ':std', ':encoding(UTF-8)';  # Ensure input and output are treated as UTF-8
 use Text::Unidecode; # transform special letters into ascii friendly ncbi readable output
-
 
 ###################################################
 # Pipeline written by Juliane Romahn 
@@ -15,8 +14,50 @@ use Text::Unidecode; # transform special letters into ascii friendly ncbi readab
 # dependencies: perl
 ###################################################
 
-my $input_file="db_v05_r117.fasta"; #input filename and if necceassary path to file
-my $output_file="db_v05_r117__obi4.fasta"; #output filename and if necceassary path to file
+###################################################
+#### manage ARGV
+
+# Help message
+my $usage = "
+Usage: Convert_obi1_to_obi4.pl <input_file> 
+Purpose: Converting ObiTools Version 1 DB for ObiTools4 in the same path
+
+Arguments:
+  input_file\t\tFasta DB file in obitools1 format (full path)
+
+Options:
+  -h, --help\t\tShow this help message and exit
+
+Example:
+  Convert_obi1_to_obi4.pl PhyloAlps_obi1.fasta
+";
+
+# Check for help flag
+if (@ARGV == 1 && ($ARGV[0] eq "-h" || $ARGV[0] eq "--help")) {
+  print $usage;
+  exit 0;
+}
+
+# Check number of arguments
+if (@ARGV != 1) {
+  print "ERROR: Wrong number of arguments. Expected 1, got " . scalar(@ARGV) . "\n";
+  print $usage;
+  exit;
+}
+
+# Assign arguments to named variables
+my $input_file  = $ARGV[0];
+(my $output_file = $input_file) =~ s/\.\w+$/_obi4transformed.fasta/;
+
+# check if inputfile exists 
+unless (-e $input_file) {
+  print "ERROR: \t Input file not found: $input_file\n";
+  exit;
+}
+
+############## old
+#my $input_file="db_v05_r117.fasta"; #input filename and if necceassary path to file
+#my $output_file="db_v05_r117__obi4.fasta"; #output filename and if necceassary path to file
 
 ####################################################################################################################################################
 ##################################################  PLEASE DO NOT CHANGE ANYTHING FROM HERE ON #####################################################

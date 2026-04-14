@@ -16,6 +16,50 @@ use Spreadsheet::XLSX;
 ##################
 ###################################################
 
+###################################################
+#### manage ARGV
+
+# Help message
+my $usage = "
+Usage: Convert_obi1_to_obi4.pl <input_file> 
+Purpose: Converting APSCALE output into ObiTools VErsion 4 format, in the same path
+
+
+Arguments:
+  input_file\t\tExcel table of APSCALE (full path)
+
+Options:
+  -h, --help\t\tShow this help message and exit
+
+Example:
+  Convert_obi1_to_obi4.pl PROJECT_apscale/11_read_table/data/0_PROJECT_sequence_read_table_part_0.xlsx
+";
+
+# Check for help flag
+if (@ARGV == 1 && ($ARGV[0] eq "-h" || $ARGV[0] eq "--help")) {
+  print $usage;
+  exit 0;
+}
+
+# Check number of arguments
+if (@ARGV != 1) {
+  print "ERROR: Wrong number of arguments. Expected 1, got " . scalar(@ARGV) . "\n";
+  print $usage;
+  exit;
+}
+
+# Assign arguments to named variables
+my $input_file  = $ARGV[0];
+(my $output_file = $input_file) =~ s/\.\w+$/_obi4transformed.fasta/;
+
+# check if inputfile exists 
+unless (-e $input_file) {
+  print "ERROR: \t Input file not found: $input_file\n";
+  exit;
+}
+
+############## old
+
 #################### INPUT #########################
 #### PATH to apscale results, shoul fit the following pattern: {PROJECT}_apscale/11_read_table/data/0_{PROJECT}_sequence_read_table_part_0.xlsx
 my $file_excel="02_sedaDNA_apscale/11_read_table/data/0_02_sedaDNA_sequence_read_table_part_0.xlsx";

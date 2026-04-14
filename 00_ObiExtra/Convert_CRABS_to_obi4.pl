@@ -1,4 +1,4 @@
-#1/usr/bin/nev perl
+#!/usr/bin/env perl
 
 use strict;
 use warnings;
@@ -17,8 +17,51 @@ use Encode qw(encode);
 # dependencies: perl
 ###################################################
 
-my $input_file="Euka02_CRABS_EMBL_new//05_cleaned_EMBL_Euka02_L500_tax.tsv"; #input filename and if necceassary path to file
-my $output_file="Euka02_CRABS_EMBL_new/EMBL_CRABS_database_Aug24_Euka02_L500_new.fasta"; #output filename and if necceassary path to file
+
+###################################################
+#### manage ARGV
+
+# Help message
+my $usage = "
+Usage: Convert_CRABS_to_obi4.pl <input_file> 
+Purpose: Converting CRABS tsv table including taxonomy into DB for ObiTools4 in the same path
+
+Arguments:
+  input_file\t\tCRABS table with NCBI ID, taxonomy and sequences in tsv format (full path)
+
+Options:
+  -h, --help\t\tShow this help message and exit
+
+Example:
+  Convert_CRABS_to_obi4.pl CRABS_taxonomy.tsv
+";
+
+# Check for help flag
+if (@ARGV == 1 && ($ARGV[0] eq "-h" || $ARGV[0] eq "--help")) {
+  print $usage;
+  exit 0;
+}
+
+# Check number of arguments
+if (@ARGV != 1) {
+  print "ERROR: Wrong number of arguments. Expected 1, got " . scalar(@ARGV) . "\n";
+  print $usage;
+  exit;
+}
+
+# Assign arguments to named variables
+my $input_file  = $ARGV[0];
+(my $output_file = $input_file) =~ s/\.\w+$/_obi4transformed.fasta/;
+
+# check if inputfile exists 
+unless (-e $input_file) {
+  print "ERROR: \t Input file not found: $input_file\n";
+  exit;
+}
+
+############## old
+#my $input_file="Euka02_CRABS_EMBL_new//05_cleaned_EMBL_Euka02_L500_tax.tsv"; #input filename and if necceassary path to file
+#my $output_file="Euka02_CRABS_EMBL_new/EMBL_CRABS_database_Aug24_Euka02_L500_new.fasta"; #output filename and if necceassary path to file
 
 ####################################################################################################################################################
 ##################################################  PLEASE DO NOT CHANGE ANYTHING FROM HERE ON #####################################################

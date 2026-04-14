@@ -9,6 +9,60 @@
 ########################################
 
 #rm(list=ls())  
+
+############################
+## Handle Input
+args = commandArgs(trailingOnly=TRUE)
+# Help message
+usage <- "
+Usage: 03_ObiWizard_diagnostic.R <path> <input_file> <taxdump_path> <threads> <functions_path>
+
+Arguments:
+  path \t Path to the ObiTools matrix file
+  input_file \t Filename of the ObiTools matrix file
+  taxdump_path \t Path to Taxdump File (used for ObiMAGIC)
+  threads \t Number of threads, necessary for ordinations
+  functions_path  \t Path to 00_OBIMAGIC_functions.R file
+
+Options:
+  -h, --help \t Show this help message and exit
+
+Example:
+  03_ObiWizard_diagnostic.R ObiMagic_results communtiy_matrix.csv /PATH/TO/TAXDUMPFILE 10 00_OBIMAGIC_functions.R
+"
+
+# Check for help flag
+if (any(args %in% c("-h", "--help"))) {
+  cat(usage)
+  quit(status = 0)
+}
+
+# Check number of arguments
+if (length(args) != 5) {
+  cat("ERROR: Wrong number of arguments. Expected 5, got", length(args), "\n")
+  cat(usage)
+  quit(status = 1)
+}
+
+## read input if check was successfull
+path=args[1] #"Malawi_2023_eDNA_results/"
+input_file =args[2] #"7_Malawi_2023_eDNA_final.fasta" #
+taxdump_path=args[3] 
+threads= args[4]
+functions_path=args[5]
+
+## if you execute it in RStudio or similar
+#path="BiodivSoup_trail_results"
+#input_file ="10_BiodivSoup_final_FolDegenRev__assigned__matrix.csv"
+#setwd("/Users/juliane/Documents/00_Work_SGN/00_PhytoArk/XX_PAPERS/2025sub_ObiMAGIC/01_Benchmarking_resubmission/testing")
+#path="01_BiodivSoup_apscale/11_read_table/data/"
+#input_file ="02_data_final_FolDegenRev__assigned__matrix.csv"
+#taxdump_path="."
+#threads=1
+#functions_path="00_OBIMAGIC_functions.R"
+############################
+
+###### Library
 #install.packages("jsonify")
 #install.packages("devtools")
  # install.packages("ghibli")
@@ -31,26 +85,6 @@ library(treemapify) ##ggtreemap
 
 options(scipen = 999) # stop scientific notation
 
-
-##############
-## Input
-args = commandArgs(trailingOnly=TRUE)
-path=args[1] #"Malawi_2023_eDNA_results/"
-input_file =args[2] #"7_Malawi_2023_eDNA_final.fasta" #
-taxdump_path=args[3] 
-threads= args[4]
-functions_path=args[5]
-
-
-#args = commandArgs(trailingOnly=TRUE)
-#path="BiodivSoup_trail_results"
-#input_file ="10_BiodivSoup_final_FolDegenRev__assigned__matrix.csv"
-#setwd("/Users/juliane/Documents/00_Work_SGN/00_PhytoArk/XX_PAPERS/2025sub_ObiMAGIC/01_Benchmarking_resubmission/testing")
-#path="01_BiodivSoup_apscale/11_read_table/data/"
-#input_file ="02_data_final_FolDegenRev__assigned__matrix.csv"
-#taxdump_path="."
-#threads=1
-#functions_path="00_OBIMAGIC_functions.R"
 
 #### read in all functions
 source(functions_path)
@@ -136,13 +170,13 @@ if (grepl("^taxon", taxonomy$taxid[1])) {
   taxonomy <- taxonomy %>% 
     mutate(save=taxonomy$taxid ) %>%
     mutate(taxid= gsub("taxon:(\\d+).*", "\\1", save, perl=T))%>% 
-    mutate(scientific_name= gsub("taxon:\\d+.*\\[(.*)\\].*", "\\1", save, perl=T))%>%
+    mutate(scientific_name= gsub("taxon:\\d+.*\\[(.*)\\]?.*$", "\\1", save, perl=T))%>%
     mutate(save=NULL)
 }
 
 # feedback by obitools 4  
 write.table(taxonomy, file=file.path(path, paste(output, "taxonomy_info.tsv", sep="__")), quote=FALSE, sep = "\t", row.names = F)
-  
+ 
 # taxonomy of ncbi taxon ids  
 detailed_taxonomy <- ncbi_taxonomy(taxonomy$taxid)
 write.table(detailed_taxonomy, file=file.path(path, paste(output, "taxonomy_SPECIES_summary.tsv", sep="__")), quote=FALSE, sep = "\t", row.names = F)
@@ -204,8 +238,8 @@ plot_function(plot, file.path(output_figures, "01_project_overview__treemap"))
 
 
 #print it as table
-community_sum_reads <- community_sum %>% select(-total_asv, -average_asv, -median_asv )
-community_sum_asvs <- community_sum %>% select(-total_reads, -average_reads, -median_reads )
+community_sum_reads <- community_sum %>% select(-total_asv, -average_asv, -median_asv, -replicates, -samples )
+community_sum_asvs <- community_sum %>% select(-total_reads, -average_reads, -median_reads, -replicates, -samples )
 community_sum <- community_sum %>% select(-average_reads, -median_reads,-average_asv, -median_asv )
 
 #print it as table
@@ -504,7 +538,7 @@ medians <- community %>%
 plot <- plot +
   geom_vline(data = medians, 
              aes(xintercept = median_reads, color = type),
-             linetype = "dashed", size = 1) +
+             linetype = "dashed", linewidth = 1) +
   scale_color_manual(values = color_df$color, breaks = color_df$type)+
   labs(subtitle ="Line represents median of the reads groupd after reads", color="")
 

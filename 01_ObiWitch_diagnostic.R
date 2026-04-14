@@ -10,27 +10,41 @@
 ########################################
   
 rm(list=ls())  
-#install.packages("jsonify")
-#install.packages("devtools")
-#devtools::install_git("https://git.metabarcoding.org/obitools/obitools4/robireadfasta.git")
-#library(ROBIFastread)
-library(tidyverse)
-library(vegan)
-library(magrittr)
-library(seqinr)
-library(ggpmisc)
-library(gapminder) # allow commas in numbers --> +scale_y_continuous(labels = scales::comma)
-library(ggpubr) # ggplot stats
-library(ghibli) ## ggplot colors
-library(cowplot) ## add text under plot
-library(plotly) ##ggtreemap
-library(treemapify) ##ggtreemap
-options(scipen = 999) # stop scientific notation & add comma to larger numbers
-
 
 #############################
 ## Input
 args = commandArgs(trailingOnly=TRUE)
+# Help message
+usage <- "
+Usage: 01_ObiWitch_diagnostic.R <path> <input_file> <ngs_file> <threads> <functions_path> 
+
+  Arguments:
+    path \t Path to the ObiTools matrix file
+    input_file \t Filename of the ObiTools matrix file
+    ngs_file \t Filename of the demultiplexing matrix file (has to be in path)
+    threads \t Number of threads, necessary for ordinations
+    functions_path  \t Path to 00_OBIMAGIC_functions.R file
+
+  Options:
+    -h, --help \t Show this help message and exit
+
+  Example:
+    01_ObiWitch_diagnostic.R ObiMagic_results communtiy_matrix.csv ngsfile.ngs 10 00_OBIMAGIC_functions.R
+"
+
+# Check for help flag
+if (any(args %in% c("-h", "--help"))) {
+  cat(usage)
+  quit(status = 0)
+}
+
+# Check number of arguments
+if (length(args) != 5) {
+  cat("ERROR: Wrong number of arguments. Expected 5, got", length(args), "\n")
+  cat(usage)
+  quit(status = 1)
+}
+
 path=args[1] 
 input_file =args[2] 
 ngs_file=args[3]
@@ -48,6 +62,25 @@ project=gsub("_results","", path)
 #threads=1
 #functions_path="00_OBIMAGIC_functions.R"
 #project=gsub("_results","", path)
+
+##### library
+#install.packages("jsonify")
+#install.packages("devtools")
+#devtools::install_git("https://git.metabarcoding.org/obitools/obitools4/robireadfasta.git")
+#library(ROBIFastread)
+library(tidyverse)
+library(vegan)
+library(magrittr)
+library(seqinr)
+library(ggpmisc)
+library(gapminder) # allow commas in numbers --> +scale_y_continuous(labels = scales::comma)
+library(ggpubr) # ggplot stats
+library(ghibli) ## ggplot colors
+library(cowplot) ## add text under plot
+library(plotly) ##ggtreemap
+library(treemapify) ##ggtreemap
+options(scipen = 999) # stop scientific notation & add comma to larger numbers
+
 
 
 #### read in all functions 
@@ -161,7 +194,7 @@ community_sum <- categorize_community(community,asv_start)
 print("Project plotting")
 plot <- ggplot(community_sum, aes(area = replicates, fill = type, label= type, subgroup=type_long)) +
   geom_treemap()+
-  geom_treemap_subgroup_border(color="white", size=4)+
+  geom_treemap_subgroup_border(color="white", linewidth=4)+
   geom_treemap_subgroup_text(place ="center",color="white",reflow = T)+
   geom_treemap_text(color="black", alpha = 0.7)+
   scale_fill_manual(values=color_df$color, breaks = color_df$type)+
@@ -174,25 +207,28 @@ plot_function(plot, file.path(output_figures, "01_project_overview__treemap"))
 #print(community_sum)
 #quit()
 
-community_sum_reads <- community_sum %>% select(-total_asv, -average_asv, -median_asv )
-community_sum_asvs <- community_sum %>% select(-total_reads, -average_reads, -median_reads )
+community_sum_reads <- community_sum %>% select(-total_asv, -average_asv, -median_asv, -replicates, -samples )
+community_sum_asvs <- community_sum %>% select(-total_reads, -average_reads, -median_reads, -replicates, -samples )
 community_sum <- community_sum %>% select(-average_reads, -median_reads,-average_asv, -median_asv )
 
 #print it as table
-plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum), size=3)+
+plot<- ggplot() + theme_void() + 
+  annotate(geom="table",x=1,y=1,label=list(community_sum), size=3)+
   labs(title= paste("Project overview:",output ),
        subtitle = "Total includes multiplexed primers (if existing)")
 print(plot)
 plot_function(plot, file.path(output_figures, "02_project_overview_table"))
 
 
-plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum_reads), size=3)+
+plot<- ggplot() + theme_void() + 
+  annotate(geom="table",x=1,y=1,label=list(community_sum_reads), size=3)+
   labs(title= paste("Project overview:",output ),
        subtitle = "Total includes multiplexed primers (if existing)")
 print(plot)
 plot_function(plot, file.path(output_figures, "02_project_overview_table__reads"))
 
-plot<- ggplot() + theme_void() + annotate(geom="table",x=1,y=1,label=list(community_sum_asvs), size=3)+
+plot<- ggplot() + theme_void() + 
+  annotate(geom="table",x=1,y=1,label=list(community_sum_asvs), size=3)+
   labs(title= paste("Project overview:",output ),
        subtitle = "Total includes multiplexed primers (if existing)")
 print(plot)
@@ -203,6 +239,11 @@ plot_function(plot, file.path(output_figures, "02_project_overview_table__Asv"))
 ### print read numbers in plate format if infomration exists
 print("Plate plotting")
 if ( length(index_position) >0 ){
+    # define size range of geom_point()
+    min_reads <- min(plate_plot$total.reads, na.rm = TRUE)
+    max_reads <- max(plate_plot$total.reads, na.rm = TRUE)
+
+
     for( no in unique(plate_plot$plate_no)){
         if(no >0){ # since we include a spaceholder if these information are missing within OBIMAGIC, loop should not executed in those cases
           plot <- plate_plot %>% filter(plate_no==no)%>%
@@ -215,6 +256,7 @@ if ( length(index_position) >0 ){
             #scale_size_manual(labels = scales::comma)+
             scale_color_manual( values=color_df$color, 
                               breaks = color_df$type)+
+            scale_size_continuous(range = c(2, 10), limits = c(min_reads, max_reads))+  
             guides(color = guide_legend(nrow = 2))+ theme(legend.box="vertical")
           
           print(plot)
@@ -257,26 +299,31 @@ plot<- ggdraw(add_sub(plot, "Asteriks represent mean multiple pairwise tests aga
 print(plot)
 plot_function(plot, file.path(output_figures, "04_ASVnumber_Distribution"))
 
+
 plot<- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%>%
-  ggplot( aes(x=as.factor(type), y=total.asvs, fill=type)) + 
-    geom_violin( alpha=0.5) +
+  ggplot( aes(x=as.factor(type), y=total.asvs)) + 
+    geom_violin( alpha=0.5, aes( fill=type)) +
+    geom_jitter(width = 0.1, size = 2, alpha =0.5, aes(color=type))+
     labs(x = "Type", y="Total ASV no.", 
          title = "Negative Control Overview - ASVs number distribution",
          subtitle = "ASVs per relicate splitted after Sample Type") +
     plot_theme+ 
     scale_y_continuous(labels = scales::comma)+
-  scale_fill_manual(values=color_df$color, breaks = color_df$type)
+    scale_fill_manual(values=color_df$color, breaks = color_df$type)+
+    scale_color_manual(values=color_df$color, breaks = color_df$type)
 print(plot)
 plot_function(plot, file.path(output_figures, "05_ASVnumber_negative_control_overview"))
 
-ggplot(community, aes(x=as.factor(type), y=total.asvs, fill=type)) + 
-  geom_violin( alpha=0.5) +
+plot <- ggplot(community, aes(x=as.factor(type), y=total.asvs)) + 
+  geom_violin( alpha=0.5, aes(fill=type)) +
+  geom_jitter(width = 0.1, size = 2, alpha =0.5, aes(color=type))+
   labs(x = "Type", y="Total ASV no.", 
        title = "Control Overview - ASVs number distribution ",
        subtitle="ASVs per relicate splitted after Sample Type") +
   facet_wrap(~type, scales= "free") + plot_theme+ 
   scale_y_continuous(labels = scales::comma)+
-  scale_fill_manual(values=color_df$color, breaks = color_df$type)
+  scale_fill_manual(values=color_df$color, breaks = color_df$type)+
+  scale_color_manual(values=color_df$color, breaks = color_df$type)
 print(plot)
 plot_function(plot, file.path(output_figures, "05_ASVnumber_control_overview"))
 
@@ -308,15 +355,17 @@ plot<- community%>%filter( mapply(grepl, grep_negative_controls, type, perl=T))%
 print(plot)
 plot_function(plot, file.path(output_figures, "05_Readnumber_negative_control_overview"))
 
-plot <- ggplot(community, aes(x=as.factor(type), y=total.reads, fill=type)) + 
-  geom_violin(alpha=0.5) +
+plot <- ggplot(community, aes(x=as.factor(type), y=total.reads)) + 
+  geom_violin(alpha=0.5, aes (fill=type)) +
+  geom_jitter(width = 0.1, size = 2, alpha =0.5, aes(color= type))+
   labs(x = "Type", y="Total Read no.", 
        title = "Control Overview - Reads",
        subtitle = "Reads per relicate splitted after Sample Type",
        fill="Sample Type") +
   facet_wrap(~type, scales= "free") + plot_theme+ 
   scale_y_continuous(labels = scales::comma)+
-  scale_fill_manual(values=color_df$color, breaks = color_df$type)
+  scale_fill_manual(values=color_df$color, breaks = color_df$type)+
+  scale_color_manual(values=color_df$color, breaks = color_df$type)
 print(plot)
 plot_function(plot, file.path(output_figures, "05_Readnumber_control_overview"))
 
@@ -454,7 +503,7 @@ medians <- community %>%
 plot <- plot +
   geom_vline(data = medians, 
              aes(xintercept = median_reads, color = type),
-             linetype = "dashed", size = 1) +
+             linetype = "dashed", linewidth = 1) +
   scale_color_manual(values = color_df$color, breaks = color_df$type)+
   labs(subtitle ="Line represents median of the reads groupd after reads", color="")
 
@@ -689,6 +738,3 @@ if( length(unique(community$primer))>1){
 }
 
 dev.off()
-
-
-

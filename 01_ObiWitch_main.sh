@@ -8,7 +8,8 @@ echo "$(realpath $0) $*"
 # version: "0.1" - 05.03.2025
 # version: "0.2" - 25.08.2025 - add obicsv & obmatrix to the pipeline, stats only working with Obitools 4.4 or higher
 # version: "0.3" - 15.12.2025 - solve cutadapt issue
-version="0.3"
+# version: "0.4" - 14.04.2026 - added alignment score for merging/pairing to Path 2
+version="0.4"
 ###################################################
 
 #declare ARGV variables saved as default to overwrite config
@@ -317,7 +318,7 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         echo $command
         $command 
 
-        # check the other direction /reverse complement?
+        # check the other direction /reverse complement? ( cutadapt changes the direction)
         command="cutadapt -e $mismatches --no-indels --minimum-length 10 --cores $threads -g file:${output_file2_F} -G file:${output_file2_R}  \
         -o $output_path/$name2{name1}-$name1{name2}_2.1.fastq.gz -p $output_path/$name2{name1}-$name1{name2}_2.2.fastq.gz \
          $file2 $file1"
@@ -371,6 +372,17 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     mkdir -p $output_known
 
     LOG_mergin="$output/01_demultiplexed_LOG.txt"
+    
+    #### create readme outbut
+    if [ "$FLAG_remove" == "Y" ]; then
+        ## readme
+        printf  "\n#2.Step \t recover full sequence read \n" >> $readme_file
+        printf  "$output_path/*.1/2.fastq.gz  \t Recovered sequence of library 1 with alignmentscore of $minimum_alignment_score and overlap of 10  \n" >> $readme_file
+    else 
+        ## readme
+        printf  "\n#2.Step \t recover full sequence read \n" >> $readme_file
+        printf  "$output_path/*.1/2.fastq.gz  \t Recovered sequence of library 1 without alignmentscore and overlap of 10  \n" >> $readme_file
+    fi
 
     #### use ngs file again to merge each  sample independently (easier to reformat the files)
     while IFS= read -r line  ; do
@@ -388,14 +400,28 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
             #execute the merging
             echo "$output_path - $sample" 
             printf "$forward_tag$forward_primer\t$reverse_tag$reverse_primer\t$sample\n" >> $LOG_mergin
-
-            # first forward direction
-            echo "obi4_obipairing --max-cpu $threads --compress --min-overlap=10 -F $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz \
-                -R $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz >  $output_known/${sample}.fastq.gz"
-
-            obi4_obipairing --max-cpu $threads --compress --min-overlap=10 -F "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz" \
-                -R "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz" >  "$output_known/${sample}.fastq.gz" 
             
+            options="--max-cpu $threads --compress"
+
+            ########################
+            if [ "$FLAG_remove" == "Y" ]; then
+                    echo "obi4_obipairing $options --min-identity=$minimum_alignment_score --min-overlap=10 \
+                        -F $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz \
+                        -R $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz >  $output_known/${sample}.fastq.gz"
+                    obi4_obipairing $options --min-identity=$minimum_alignment_score --min-overlap=10 \
+                        -F "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz" \
+                        -R "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz" >  "$output_known/${sample}.fastq.gz"
+                    ## 
+            else
+                    echo "obi4_obipairing $options --min-overlap=10 \
+                        -F $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz \
+                        -R $output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz >  $output_known/${sample}.fastq.gz"
+                    obi4_obipairing $options --min-overlap=10 \
+                        -F "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.1.fastq.gz" \
+                        -R "$output_path/$forward_tag$forward_primer-$reverse_tag${reverse_primer}.2.fastq.gz" >  "$output_known/${sample}.fastq.gz"
+
+            fi
+
             sleep 1
 
             #add new line character
@@ -419,6 +445,7 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
         sleep 1
         #rm $file
     done
+    printf  "$merged_file  \t Concatinated all merged sampels back to one file  \n\n" >> $readme_file
     #exit
 
 
