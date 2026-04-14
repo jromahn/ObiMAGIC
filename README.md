@@ -1,11 +1,12 @@
-# ObiMAGIC v0.1
+# ObiMAGIC v0.3
 
 <img align="right" src="obimagic_logo.png"  width="270">
 
 This publication to this manuscript is submitted to Molecular Ecology Resources. If you are using this pipeline, please cite the papers & preprint listed in the [Citation](#Citation).  
 The sequencing test data set is uploaded to FigShare: https://doi.org/10.6084/m9.figshare.28700555; including the reference database: https://doi.org/10.6084/m9.figshare.28700570.
 
-[Description](#Description)  
+[Description](#Description) 
+[Quick start](#Quick-start) 
 [Setup and dependencies](#Setup-and-dependencies)   
 [Execution with and without Slurm](#Execution-with-and-without-Slurm)  
 [Usage](#Usage)  
@@ -26,9 +27,104 @@ The pipeline basically performs these steps:
 It consists of two sub-pipelines: ObiWitch (merging, sample demultiplexing and further filtering) and ObiWizard (taxonomic assignment).
 
 ![ObiMAGIC pipeline overview](obimagic.png)
-Fig.1: Graphical overview of ObiMAGIC containing two major steps separated into two sub-pipelines: 1.) ObiWitch includes demultiplexing, merging, dereplication and filtering. Please note the two different paths, which define the order of merging and sample demultiplexing. 2.) ObiWizard performs taxonomic assignment of ASVs. Asterisks highlight input of the demultiplexing file. Figure is created with Biorender.
+**Fig.1:** Graphical overview of ObiMAGIC containing two major steps separated into two sub-pipelines: 1.) ObiWitch includes demultiplexing, merging, dereplication and filtering. Please note the two different paths, which define the order of merging and sample demultiplexing. 2.) ObiWizard performs taxonomic assignment of ASVs. Asterisks highlight input of the demultiplexing file. Figure is created with Biorender.
 
 Mandatory input files are forward and reverse Illumina reads and corresponding demultiplexing file(s). All further options and parameters are optional and have default values.
+
+## Quick start
+
+### Install Apptainer
+
+Follow these instructions: [https://apptainer.org/docs/admin/main/installation.html#install-unprivileged-from-pre-built-binaries](https://apptainer.org/docs/admin/main/installation.html#install-unprivileged-from-pre-built-binaries)
+
+```
+curl -s https://raw.githubusercontent.com/apptainer/apptainer/main/tools/install-unprivileged.sh | bash -s - install-dir
+```
+
+Adjust `install-dir` to a desired location.
+
+Add `install-dir` to `$PATH`:
+
+```
+export PATH=install-dir:$PATH
+```
+
+This can be added to e.g. `~/.bashrc` to have `apptainer` available in new terminals.
+
+
+### Get the container
+
+Build the ObiMAGIC container with the definition file ([ObiMAGIC.def](ObiMAGIC.def)):
+```
+apptainer build ObiMAGIC.sif ObiMAGIC.def
+```
+
+Tested with `apptainer version 1.4.2-1.el8`.
+
+Alternatively download the containter here: [https://figshare.com/ndownloader/files/57840259](https://figshare.com/ndownloader/files/57840259)
+
+### Use the container
+
+All ObiMAGIC Skripts and dependencies including NCBI’s `new_taxdump` (dowloaded during builing process) are included in the container. Furthermore all skripts and depending software is included in the containers $PATH. Therefore, all relevant ObiMAGIC scripts, e.g. `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` can be called directly. To do so run for example: 
+`apptainer exec ObiMAGIC.sif 00_ObiMAGIC_main.pl` 
+
+Please see [Usage](#Usage) for details on how to run ObiMAGIC. 
+
+**Running pipeline path 2 (with cutadapt) in ObiMAGIC or ObiWitch** 
+Cutadapt might open many files at once, which could exceed your user limit. You can check your current limit with `ulimit -n`. Please ask your system administrator to increase this limit, if cutadapt crashes with `[Errno 24] Too many open files`.
+
+Running ObiMAGIC:
+```
+apptainer exec ObiMAGIC.sif 00_ObiMAGIC_main.pl \
+	-ngs example_ngs_file.tsv \
+	-fq example_1.fastq.gz,example_2.fastq.gz \
+	-project example_project \
+	-t 36 \
+	-slurm-mem 200G \
+	-v
+```
+
+Running ObiWitch:
+```
+apptainer exec ObiMAGIC.sif 00_ObiHelp_NGS_control.pl \
+	-primer example_primer \
+	example_ngs_file.tsv \
+	> example_ngs_file.ngs
+
+apptainer exec ObiMAGIC.sif 01_ObiWitch_main.sh \
+	-ngs example_ngs_file.ngs \
+	-fq example_1.fastq.gz,example_2.fastq.gz \
+	-project example_project
+```
+
+Running ObiWizard:
+```
+apptainer exec ObiMAGIC.sif 03_ObiWizard_main.sh \
+	-input example_final.fasta \
+	-identifier example_primer \
+	-ref example_reference.fasta
+```
+
+The container is structured as follows:
+
+| Tool | Description | Location |
+| :--- | :--- | :--- |
+| ObiMAGIC | The recent version of all ObiMAGIC scripts | `/ObiMAGIC` |
+| ObiTools4 | The most recent version of ObiTools, installed with `install_obitools.sh` and prefix `obi4_` | `/ObiTools4/bin/` |
+| Cutadapt | Cutadapt 5.1 is installed in a Python 3.12.3 virtual<br/>environment with `pip3` | `/cutadapt-5.1/bin/` |
+| `new_taxdump` | NCBI’s `new_taxdump` is downloaded during building<br/>to a directory `/new_taxdump_$(date +%Y-%m-%d)` and a<br/>softlink to this directory named `new_taxdump` is created. | `/new_taxdump` |
+
+### Versions of softwares in the container
+```
+$ apptainer exec ObiMAGIC.sif cat /whats_inside.txt
+ObiMAGIC:    0.2
+bash:        5.2.21(1)-release
+perl:        v5.38.2
+R:           4.5.1
+OBITOOLS:    OBITools Release 4.4.0 (6d204f6)
+cutadapt:    5.1
+new_taxdump: /new_taxdump_2025-10-01
+```
 
 ## Setup and dependencies
 
@@ -96,28 +192,6 @@ This ensures the scripts can be found by `00_ObiMAGIC_main.pl`, `01_ObiWitch_mai
 ObiMAGIC will submit internal processes (like ObiWitch and ObiWizard) via Slurm, if `sbatch` detected and not switched off by the user with `-no-slurm`. Furthermore, ObiMAGIC will submit ObiWizard assignments via a Slurm job array, which will assure most parallel processing of multiple taxonomic assignments. If Slurm is not detected or the user switches off submission via Slurm, all commands will be executed locally and taxonomic assignments by ObiWizard will be executed consecutively to prevent RAM limitations on smaller computing devices.
 
 ## Usage
-
-### ObiMAGIC quick start
-
-Build the ObiMAGIC singularity container:
-```
-singularity build ObiMAGIC.sif ObiMAGIC.def
-```
-[ObiMAGIC.def](ObiMAGIC.def) is available in this repository.
-
-Download the container under the following DOI on FigShare: [10.6084/m9.figshare.30099733](https://doi.org/10.6084/m9.figshare.30099733) 
-
-Running the container:
-All ObiMAGIC Skripts and dependencies including NCBI’s new_taxdump (dowloaded during builing process) are included in the container. Furthermore all Scripts and depending software are included in the containers `$PATH`. Therefore, all relevant ObiMAGIC scripts, e.g. `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` can be called directly. To do so run for example:
-```
-singularity exec 00_ObiMAGIC_main.pl
-```
-
-The container is structured as follows:
-- ObiMAGIC: The recent version of all ObiMAGIC scripts:  `/ObiMAGIC/`
-- ObiTools: The most recent version of ObiTools, installed with install_obitools.sh and prefix obi4_ : `/ObiTools4/bin/`
-- cutadapt: Cutadapt 5.1 is installed in a python3 virtual environment: `/cutadapt-5.1/bin/`
-- new_taxdump: NCBI’s new_taxdump downloaded during building to a directory `/new_taxdump_$(date +%Y-%m-%d)` and softlink to this directory named new_taxdump is created. 
 
 ### ObiMAGIC
 To run ObiMAGIC with default settings, fastq files and demultiplexing file must be specified from the command line. Otherwise, modify the configuration file and specify the path to the configuration file on the command line.
@@ -303,7 +377,7 @@ In case these parts of the pipeline fail, `00_ObiMAGIC_main.pl` will show the ex
 __If you use this tool please cite the preprint and dependencies:__
 
 - ObiMAGIC:  
-Romahn, J., Schell, T., Bálint, M. (in prep.). ObiMAGIC - Metabarcoding Analysis Guidance Integration Control Pipeline for ObiTools4.
+Romahn, J., Schell, T., Bálint, M. (under revision). ObiMAGIC - Metabarcoding Analysis Guidance Integration Control Pipeline for ObiTools4.
 - Obitools:  
 Boyer, F., Mercier, C., Bonin, A., Le Bras, Y., Taberlet, P., & Coissac, E. (2016). obitools: A unix‐inspired software package for DNA metabarcoding. Molecular ecology resources, 16(1), 176-182. <https://doi.org/10.1111/1755-0998.12428>
 - Cutadapt:  
