@@ -235,7 +235,7 @@ else
             > "$input_db_readme"
             echo "README - important information for the reference database" > $input_db_readme
             printf "PATH ObiTools: \t">> $input_db_readme
-            which obi4_obirefidx >> $input_db_readme
+            command -v obi4_obirefidx >> $input_db_readme
             printf "ObiTools Version: \t">> $input_db_readme
             obi4_obirefidx --version &>> $input_db_readme
             printf "Input FASTA: \t $db_path_to_file \n">> $input_db_readme
@@ -259,7 +259,7 @@ printf "OBiWizard Version: \t $version\n" >> $readme_file
 printf "OBiTools4 Version: \t" >> $readme_file
 obi4_obiannotate --version &>> $readme_file
 printf "Path of the ObiTools4 : \t " >> $readme_file
-which obi4_obiannotate  >> $readme_file
+command -v obi4_obiannotate  >> $readme_file
 echo ""
 echo "Start assignment with reference DB: $db_path_to_file " >> $readme_file
 
@@ -387,8 +387,8 @@ printf  "$file4, \t Community matrix, with replicate names in "id" column and or
 ######################################################################################################################################
 #exit
 if [ -f $output/$file4 ] && [ $( stat -c%s $output/$file4 ) -gt 0 ]; then
-    echo "03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)"
-    03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(which 00_OBIMAGIC_functions.R)
+    echo "03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(command -v 00_OBIMAGIC_functions.R)"
+    03_ObiWizard_diagnostic.R $output $file4 $tax_path_to_file $threads $(command -v 00_OBIMAGIC_functions.R)
 
     #exit
     file3_name=$( basename $file3 .fasta )

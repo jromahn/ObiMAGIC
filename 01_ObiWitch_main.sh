@@ -166,7 +166,7 @@ printf "OBiWitch Version: \t $version\n" >> $readme_file
 printf "OBiTools4 Version: \t" >> $readme_file
 obi4_obiannotate --version &>> $readme_file
 printf "Path of the ObiTools4 : \t " >> $readme_file
-which obi4_obiannotate  >> $readme_file
+command -v obi4_obiannotate  >> $readme_file
 printf "Using new temporary directory: \t $TMPDIR \n" >> $readme_file
 echo "" >> $readme_file
 
@@ -851,8 +851,8 @@ if [ -f $output/$file4 ] && [ $( stat -c%s $output/$file4 ) -gt 0 ]; then
     file3=$( basename $file3 )
     new_ngsfile=$( basename $new_ngsfile )
 
-    echo "TMPDIR=\"$new_temp\" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)"
-    TMPDIR="$new_temp" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(which 00_OBIMAGIC_functions.R)
+    echo "TMPDIR=\"$new_temp\" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(command -v 00_OBIMAGIC_functions.R)"
+    TMPDIR="$new_temp" 01_ObiWitch_diagnostic.R $output $file4 $new_ngsfile $threads $(command -v 00_OBIMAGIC_functions.R)
 
     file3_name=$( basename $file3 .fasta )
 
