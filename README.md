@@ -1,4 +1,4 @@
-# ObiMAGIC v0.3
+# ObiMAGIC v0.4
 
 <img align="right" src="obimagic_logo.png"  width="270">
 
@@ -59,14 +59,29 @@ Build the ObiMAGIC container with the definition file ([ObiMAGIC.def](ObiMAGIC.d
 apptainer build ObiMAGIC.sif ObiMAGIC.def
 ```
 
-Tested with `apptainer version 1.4.2-1.el8`.
+Tested with `apptainer version 1.4.2-1.el8`. We highly recommend testing if all R packages are properly installeed after building the container with the following command:
+```
+apptainer exec ObiMAGIC.sif 00_ObiHelp_R_control.R
+```
 
 Alternatively download the containter here: [https://figshare.com/ndownloader/files/57840259](https://figshare.com/ndownloader/files/57840259)
 
+
+
+**IMPORTANT NOTE**: If you are using the container when you are not in the same folder as the container you have to add the full path to the command, e.g.:
+```
+apptainer exec /FULL/PATH/TO/CONTAINER/ObiMAGIC.sif 00_ObiHelp_R_control.R
+```
+
 ### Use the container
 
-All ObiMAGIC Skripts and dependencies including NCBI’s `new_taxdump` (dowloaded during builing process) are included in the container. Furthermore all skripts and depending software is included in the containers $PATH. Therefore, all relevant ObiMAGIC scripts, e.g. `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` can be called directly. To do so run for example: 
-`apptainer exec ObiMAGIC.sif 00_ObiMAGIC_main.pl` 
+All ObiMAGIC Skripts and dependencies including NCBI’s `new_taxdump` (downloaded during builing process) are included in the container. Furthermore all skripts and depending software is included in the containers $PATH. Therefore, all relevant ObiMAGIC scripts, e.g. `00_ObiMAGIC_main.pl`, `01_ObiWitch_main.sh` and `03_ObiWizard_main.sh` can be called directly. To do so run for example: 
+`apptainer exec ObiMAGIC.sif 00_ObiMAGIC_main.pl` .
+
+**IMPORTANT NOTE**: If you are using the container when you are not in the same folder as the container you have to add the full path to the command, e.g.:
+```
+apptainer exec /HULL/PATH/TO/CONTAINER/ObiMAGIC.sif 00_ObiMAGIC_main.pl`
+```
 
 Please see [Usage](#Usage) for details on how to run ObiMAGIC. 
 
