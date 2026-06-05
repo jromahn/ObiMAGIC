@@ -460,7 +460,7 @@ thr_vals   <- summ_of_reads * thr_props
 thr_colors <- c("red", "darkred", "blue", "darkblue", "darkgreen")
 thr_labs   <- format(thr_props, scientific = FALSE)
 
-thr_df <- data.frame(x = thr_vals, label = thr_labs, col = thr_colors)
+thr_df <- data.frame(x = thr_vals, label = thr_labs, thr_colors = thr_colors, props=thr_props)
 
 # 3) Frequency table (how many ASVs have N reads)
 freq_table <- as.data.frame(table(reads_per_seq_variant))
@@ -471,22 +471,24 @@ freq_table$reads <- as.numeric(as.character(freq_table$reads))
 freq_plot <- subset(freq_table, reads > 0 & freq > 0)
 
 # 4) Plot
+
 plot <- ggplot(freq_plot, aes(x = reads, y = freq)) +
   geom_point(alpha = 0.6, size = 2) +
   # vertical threshold lines
-  geom_vline(data = thr_df, aes(xintercept = x, color = col), linewidth = 0.7, show.legend = FALSE) +
+  geom_vline(data = thr_df, aes(xintercept = x, colour = thr_labs), linewidth = 0.7, show.legend = FALSE) +
   # text labels for thresholds
   annotate("text",
            x = mean(freq_plot$reads) * 3, y =  max(freq_plot$freq) * c(0.90, 0.70, 0.55, 0.43, 0.30),
-           label = thr_labs, hjust = 1, vjust = 1, size = 3.2,
-           color = thr_colors) +
+           label = paste(thr_df$props,round(thr_df$x, 1), sep="/~") , hjust = 1, vjust = 1, size = 3.2,
+           color = rev(thr_df$thr_colors)) +
+  scale_color_manual(values = setNames(thr_df$thr_colors, thr_df$thr_labs)) +
   scale_x_log10() +  scale_y_log10() +plot_theme+
   labs(
     title = "Frequency distribution of read numbers in ASVs",
-    subtitle = "Lines & colors represent different proportions of total read number",
+    subtitle = "Lines & colors represent different proportions of total read number/actual read number",
     x = "Read count of an ASV",
     y = "Frequency"
-  )
+  )+theme(legend.position = "bottom")
 
 print(plot)
 plot_function(plot, file.path(output_figures, "07_Low_frequency_ASV_detection"))
