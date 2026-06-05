@@ -7,21 +7,107 @@ From: ubuntu:24.04
         apptainer exec 00_ObiMAGIC_main.pl
 
 %post
+	export DEBIAN_FRONTEND=noninteractive
+	export PATH=/R/bin:$PATH
+	export LD_LIBRARY_PATH=/R/lib:$LD_LIBRARY_PATH
+	
 	apt-get -y update
-	apt-get -y install --no-install-recommends perl libjson-perl libgd-perl build-essential curl libcurl4-gnutls-dev zlib1g-dev libssl-dev python3-dev python3-pip python3-venv wget pigz git gfortran libbz2-dev liblzma-dev libpcre2-dev libblas-dev liblapack-dev cmake dos2unix libxml2-dev libpng-dev libjpeg-turbo8-dev libfontconfig1-dev libharfbuzz-dev libfribidi-dev libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libwebp-dev
+	apt-get -y install --no-install-recommends \
+		build-essential \
+		cmake \
+		curl \
+		dos2unix \
+		gfortran \
+		git \
+		libblas-dev \
+		libbz2-dev \
+		libcairo2-dev \
+		libcurl4-gnutls-dev \
+		libfreetype6-dev \
+		libfribidi-dev \
+		libgd-perl \
+		libgit2-dev \
+		libharfbuzz-dev \
+		libjpeg-dev \
+		libjpeg-turbo8-dev \
+		libjson-perl \
+		liblapack-dev \
+		liblzma-dev \
+		libpcre2-dev \
+		libpng-dev \
+		libreadline-dev \
+		libsqlite3-dev \
+		libssl-dev \
+		libtiff5-dev \
+		libuv1-dev \
+		libv8-dev \
+		libwebp-dev \
+		libxml2-dev \
+		libxt-dev \
+		perl \
+		pigz \
+		python3-dev \
+		python3-pip \
+		python3-venv \
+		unzip \
+		wget \
+		zlib1g-dev
 
 	#perl modules
 	cpan App::cpanminus
 	cpanm Cwd File::Basename IO::Zlib IPC::Cmd List::MoreUtils File::Find Encode Text::Iconv Spreadsheet::XLSX
 	
 	#R 4.5.1
-	apt-get -y install --no-install-recommends software-properties-common dirmngr
-	wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
-	add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
-	apt-get -y install --no-install-recommends r-base
+	wget https://cloud.r-project.org/src/base/R-4/R-4.5.1.tar.xz
+	tar xf R-4.5.1.tar.xz
+	cd R-4.5.1
+	./configure --prefix=/R --with-x=no --with-blas --with-lapack --enable-R-shlib --with-readline=yes
+	make
+	make install
+	cd ..
+	rm -rf R-4.5.1 R-4.5.1.tar.xz
+	
+	#R library path
+	mkdir -p /R/library
+	echo '.libPaths("/R/library")' >> /R/lib/R/etc/Rprofile.site
 
 	#R libraries
-	R -e "install.packages(c('cowplot','dplyr','gapminder','ggplot2','ggpmisc','ggpubr','ghibli','magrittr','plotly','seqinr','taxize','taxonomizr','tidyverse','treemapify','vegan'),repos='http://cran.us.r-project.org')"
+	R -e "
+		options(repos = c(CRAN = 'https://cloud.r-project.org/'))
+		pkgs <- c(
+			# Dependencies
+			'htmlwidgets', 'magrittr', 'data.table', 'broom',
+			# Plotting
+			'ggplot2', 'ggpmisc', 'ggpubr', 'cowplot', 'plotly', 'treemapify', 'ghibli', 'gapminder',
+			# Core tidyverse
+			'dplyr', 'tidyr', 'tidyverse',
+			# Bioinformatics / ecology
+			'seqinr', 'vegan', 'taxize', 'taxonomizr'
+		)
+
+		failed <- c()
+		for (pkg in pkgs) {
+			if (!requireNamespace(pkg, quietly = TRUE)) {
+				tryCatch(
+					install.packages(pkg, dependencies = TRUE),
+					error = function(e) {
+						failed <<- c(failed, pkg)
+						message('FAILED: ', pkg, ' - ', e\$message)
+					}
+				)
+			} else {
+				message('Already installed: ', pkg)
+			}
+		}
+
+		if (length(failed) > 0) {
+			writeLines(failed, '/missing_r_packages.txt')
+			message('Missing packages logged to /missing_r_packages.txt')
+		} else {
+			if (file.exists('/missing_r_packages.txt')) file.remove('/missing_r_packages.txt')
+			message('All packages installed successfully.')
+		}
+	"
 
 	#cutadapt
 	python3 -m venv cutadapt-5.1
@@ -42,10 +128,9 @@ From: ubuntu:24.04
 	
 	#ObiMAGIC
 	git clone https://github.com/jromahn/ObiMAGIC.git
-	cd ObiMAGIC
-	git checkout v0.3
 
 %environment
-    export LC_ALL=C
-    export PATH=/ObiMAGIC:/ObiMAGIC/00_ObiScripts:/ObiMAGIC/00_ObiExtra:/ObiTools4/bin:/cutadapt-5.1/bin:$PATH
+	export LC_ALL=C
+	export LD_LIBRARY_PATH=/R/lib:$LD_LIBRARY_PATH
+	export PATH=/ObiMAGIC:/ObiMAGIC/00_ObiScripts:/ObiMAGIC/00_ObiExtra:/ObiTools4/bin:/cutadapt-5.1/bin:/R/bin:$PATH
 
