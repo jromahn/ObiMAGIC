@@ -9,7 +9,8 @@ echo "$(realpath $0) $*"
 # version: "0.2" - 25.08.2025 - add obicsv & obmatrix to the pipeline, stats only working with Obitools 4.4 or higher
 # version: "0.3" - 15.12.2025 - solve cutadapt issue
 # version: "0.4" - 14.04.2026 - added alignment score for merging/pairing to Path 2
-version="0.4"
+# version: "0.5" - 17.09.2026 - raw read can be truncated at 3' ($trim_3prime) and read overview matrix after demultiplexing
+version="0.5"
 ###################################################
 
 #declare ARGV variables saved as default to overwrite config
@@ -179,7 +180,7 @@ echo ""
 merged_file="$output/01_merged.fastq.gz"
 step3_file="" #spaceholder
 step4_file="" #spaceholder
-
+raw_merged_file=""
 
 ###########################################
 ## test if input files exist
@@ -199,6 +200,36 @@ if  [ $error -gt 0 ];then
         fi
 fi
 ###########################################
+
+######################################################################################################################################
+###### Truncate raw reads: cut off read-through artifact at the 3' end
+###### new in version 0.5
+######################################################################################################################################
+trim_3prime="${trim_3prime:-0}"
+
+if [ "$trim_3prime" -gt 0 || ! "$trim_3prime" == "N" ] 2>/dev/null; then
+    trimmed_read1="$output/00_${project}_R1.trimmed.fastq.gz"
+    trimmed_read2="$output/00_${project}_R2.trimmed.fastq.gz"
+
+    #define minimum length for cutadapt
+    minimum_length=10
+
+    # extract cutadapt version
+    printf "cutadapt Version: \t" >> $readme_file
+    cutadapt --version &>> $readme_file
+
+    echo "cutadapt --cores $threads --minimum-length $minimum_length -u -$trim_3prime -U -$trim_3prime -o $trimmed_read1 -p $trimmed_read2 $read1 $read2"
+    cutadapt --cores $threads --minimum-length $minimum_length -u -$trim_3prime -U -$trim_3prime \
+        -o $trimmed_read1 -p $trimmed_read2 "$read1" "$read2"
+
+    # overwrite input files
+    read1=$trimmed_read1
+    read2=$trimmed_read2
+
+    printf "#0.Step \t truncate raw reads \n" >> $readme_file
+    printf "$(basename $trimmed_read1), $(basename $trimmed_read2) \t Raw reads with %s bp hard-clipped off the 3' end to remove read-through artifact, only kept reads longer than $minimum_length bp \n\n" "$trim_3prime" >> $readme_file
+
+fi
 
 
 ######################################################################################################################################
@@ -447,6 +478,9 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     done
     printf  "$merged_file  \t Concatinated all merged sampels back to one file  \n\n" >> $readme_file
     #exit
+    
+    # new for version 0.5 for extra stats file
+    raw_merged_file=$merged_file
 
 
     #### move all files left because they are also unknown samples ( leftovers can exist if primers were multiplexed)
@@ -504,6 +538,7 @@ elif  [[ "$FLAG_DEMULTI_FIRST" == "FALSE" && ! -f "$merged_file" ]]; then
             printf  "#1.Step \t recover full sequence read \n" >> $readme_file
             printf  "1_merged.fastq.gz \t Recovered sequence of library 1 without alignmentscore and overlap of 10  \n" >> $readme_file
     fi
+
 fi
 echo "" >> $readme_file
 
@@ -548,14 +583,18 @@ if  [ "$FLAG_DEMULTI_FIRST" == "FALSE" ]; then
         #sleep 5
         if  [ -f "$step3_file" ] && [ $( stat -c%s "$step3_file" ) -gt 0 ]; then
             #obi4_obimultiplex --max-cpu $threads --compress -t $new_ngsfile -e $mismatches -u $output/03_unidentified.fastq.gz $step3_file > $step4_file
-	    obi4_obimultiplex --max-cpu $threads --compress --tag-list $new_ngsfile -e $mismatches -u $output/03_unidentified.fastq.gz $step3_file > $step4_file
+            obi4_obimultiplex --max-cpu $threads --compress --tag-list $new_ngsfile -e $mismatches -u $output/03_unidentified.fastq.gz $step3_file > $step4_file
+                
             
-	    
             printf  "#3.Step \t demultiplex sequences with $$mismatches mismatches allowed \n" >> $readme_file
             printf  "03_unidentified.fastq.gz \t Sequences with unidentified tag combination  \n" >> $readme_file
             printf  "03_demultiplexed.fastq.gz \t Demultiplexed Sequences with removed unidentified tag combination  \n" >> $readme_file
             printf  "${project}__ngsfile.tsv \t Cleaned and reformated demultiplex file to change most special characters \(just in case\) used for demultiplexing \n" >> $readme_file      
-            
+
+
+            # new for version 0.5 for extra stats file
+            raw_merged_file=$step4_file    
+
         else
             printf "CAUTION! \t $step3_file  \t doesn't exist.\n"
             exit 6
@@ -841,6 +880,37 @@ obi4_obimatrix $output/$file3 > $output/$file4
 printf  "${file3_name}__general_infos.csv, \t General information of sequences/ASVs provided by ObiTools4 including original SV names\n" >> $readme_file ##
 printf  "$file4, \t Community matrix, with replicate names in "id" column and original ASV names as columns each\n" >> $readme_file ##
 
+
+######################################################################################################################################
+## new for version 0.5
+file5="${file3_name}__rawreads.csv"
+search_tag="sample"
+
+if [ -n "$raw_merged_file" ] && [ -f "$raw_merged_file" ]; then
+
+    if zcat "$raw_merged_file" | head -n 1 | grep "\"${search_tag}\":\"" > /dev/null; then
+
+        echo "Found '${search_tag}' annotation - counting reads per sample"
+
+        zcat "$raw_merged_file" \
+          | awk 'NR%4==1' \
+          | grep -oP "\"${search_tag}\":\"\K[^\"]+" \
+          | sort \
+          | uniq -c \
+          | awk -v tag="$search_tag" 'BEGIN{OFS="\t"; print tag,"reads"} {print $2,$1}' \
+          > "$output/$file5"
+
+        printf  "$file5, \t CSV table representing raw reads after merging and demultiplexing\n" >> $readme_file ##
+        #exit
+    else
+        printf "CAUTION! \t '${search_tag}' annotation not found in $raw_merged_file - skipping per-sample read count \n"
+        printf "CAUTION! \t '${search_tag}' annotation not found in $raw_merged_file - skipping per-sample read count \n" >> $readme_file ##
+    fi
+
+else
+    printf "CAUTION! \t \$raw_merged_file is not set or doesn't exist - skipping per-sample read count \n"
+    printf "CAUTION! \t \$raw_merged_file is not set or doesn't exist - skipping per-sample read count \n" >> $readme_file ##
+fi
 
 #exit
 ######################################################################################################################################

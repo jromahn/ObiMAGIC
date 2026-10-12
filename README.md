@@ -31,6 +31,14 @@ It consists of two sub-pipelines: ObiWitch (merging, sample demultiplexing and f
 
 Mandatory input files are forward and reverse Illumina reads and corresponding demultiplexing file(s). All further options and parameters are optional and have default values.
 
+## Version overview
+
+### v0.5
+Downward compatibility
+1.) `ObiWitch`: adding the option `trim_3prime` to `ObiWitch_config.ini`, which allow to shorten paired-end reads before further processing
+2.) `ObiWitch`: new statistics output `08_PROJECTNAME__rawreads.csv` - contains raw read number after demultiplexing and merging per replicate ( 1.column: replicate name, 2. column: total read number)  
+
+
 ## Quick start
 
 ### Install Apptainer

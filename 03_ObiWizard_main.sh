@@ -8,7 +8,7 @@ echo "$(realpath $0) $*"
 # Pipeline written by Juliane Romahn 
 # version: "0.1" - 05.03.2025
 # version: "0.2" - 27.08.2025 - Juliane Romahn, add obicsv & obimarix, test if input file exists
-version="0.2"
+version="0.5"
 ###################################################
 
 

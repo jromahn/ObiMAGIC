@@ -16,7 +16,7 @@ use File::Find;
 use Scalar::Util qw(looks_like_number);
 
 #define pipeline version
-my $version = "0.2"; # obimagic version
+my $version = "0.5"; # obimagic version
 
 #### #define variables
 my @orig_ngs = ();
