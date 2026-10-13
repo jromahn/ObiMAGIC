@@ -1,4 +1,4 @@
-# ObiMAGIC v0.4
+# ObiMAGIC v0.5
 
 <img align="right" src="obimagic_logo.png"  width="270">
 
