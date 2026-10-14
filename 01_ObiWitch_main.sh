@@ -207,7 +207,7 @@ fi
 ######################################################################################################################################
 trim_3prime="${trim_3prime:-0}"
 
-if [ "$trim_3prime" -gt 0 || ! "$trim_3prime" == "N" ] 2>/dev/null; then
+if [[ "$trim_3prime" =~ ^[0-9]+$ ]] && (( trim_3prime > 0 )); then
     trimmed_read1="$output/00_${project}_R1.trimmed.fastq.gz"
     trimmed_read2="$output/00_${project}_R2.trimmed.fastq.gz"
 
