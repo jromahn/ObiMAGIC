@@ -74,7 +74,7 @@ Tested with `apptainer version 1.4.2-1.el8`. We highly recommend testing if all 
 apptainer exec ObiMAGIC.sif 00_ObiHelp_R_control.R
 ```
 
-Alternatively download the containter here: [https://figshare.com/ndownloader/files/57840259](https://figshare.com/ndownloader/files/57840259)
+Alternatively download the containter here: [https://figshare.com/ndownloader/files/57840259](https://figshare.com/ndownloader/files/70239483)
 
 
 
