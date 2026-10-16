@@ -411,7 +411,7 @@ while (my $line = <DBCONF>){
 	chomp $line;
 	my ($primer,$db_path) = split(/\t/,$line);
 	#check if db_path is an absolute path otherwise make it one
-	if($db_path !~ /^/){
+	if($db_path !~ m{^/}){
 		$db_path = abs_path(dirname($0)) . "/$db_path";
 	}
 	if(exists($db{$primer})){
@@ -518,7 +518,7 @@ foreach(keys(%fq_filter)){
 	push(@forward,$for);
 	push(@reverse,$rev);
 	if(scalar(keys(%fq_filter)) > 1){ #more than one fastq file pair will be concatenated into one fastq file pair
-		$cmd = "cat " . join(" ",@forward) . " > $out_dir/$project\_1.fq.gz & cat " . join(" ",@reverse) . " > $out_dir/$project\_2.fq.gz";
+		$cmd = "cat " . join(" ",@forward) . " > $out_dir/$project\_1.fq.gz && cat " . join(" ",@reverse) . " > $out_dir/$project\_2.fq.gz";
 		exe_cmd($cmd,$verbose,$dry);
 	}
 	else{ #if only one fastq file pair is specified create soft links
@@ -541,7 +541,7 @@ exe_cmd($cmd,$verbose,$dry);
 
 ################################ RUN ObiWITCH ################################
 ####### run obiwitch
-$cmd = "01_ObiWitch_main.sh -obiwitch-config $out_dir/$project\_obiwitch.ini";
+$cmd = "01_ObiWitch_main.sh -obiwitch-config $out_dir/$project\_obiwitch.ini -o $out_dir";
 if($slurm == 1){
 	$cmd = "sbatch --job-name=$project\_obiwitch $slurm_opts --wait --wrap=\"$cmd\"";
 }
@@ -559,7 +559,12 @@ if($keep_tmp == 0){
 
 #split demultiplexed files
 #not submitted via slurm
-$cmd = "02_ObiHelp_split_samples.pl $project\_results/08_$project\_final.fasta $project\_results/00_$project\__ngsfile.tsv";
+#$cmd = "02_ObiHelp_split_samples.pl $out_dir/$project\_results/08_$project\_final.fasta $out_dir/$project\_results/00_$project\__ngsfile.tsv";
+my ($final_fasta) = glob("$out_dir/$project\_results/[0-9][0-9]_$project\_final.fasta");
+die "ERROR\tNo final fasta found in $out_dir/$project\_results\n" if ($dry == 0 and not defined $final_fasta);
+$final_fasta //= "$out_dir/$project\_results/08_$project\_final.fasta";
+$cmd = "02_ObiHelp_split_samples.pl $final_fasta $out_dir/$project\_results/00_$project\__ngsfile.tsv";
+
 #if($slurm == 1){
 #	$cmd = "sbatch --job-name=$project\_demux $slurm_opts --wrap=\"$cmd\"";
 #}
@@ -567,7 +572,9 @@ exe_cmd($cmd,$verbose,$dry);
 
 ###
 # extract the leading number and increment it
-my $filename_fasta = basename("$project\_results/08_$project\_final.fasta");   # "09_BiodivSoup_final__FolDegenRev.fasta"
+#my $filename_fasta = basename("$project\_results/08_$project\_final.fasta");   # "09_BiodivSoup_final__FolDegenRev.fasta"
+my $filename_fasta = basename($final_fasta);
+
 #print $filename_fasta, "\n";
 $filename_fasta =~ m/(\d+)_/;   # capture digits before the first "_"
 my $num = $1;

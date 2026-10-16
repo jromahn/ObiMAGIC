@@ -388,7 +388,7 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     fi
 
     #mv unidentified tags
-    mv $file $output_path/*unknown*.fastq.gz $output_unknown
+    mv $output_path/*unknown*.fastq.gz $output_unknown
 fi 
 
 #exit
@@ -470,7 +470,7 @@ if  [ "$FLAG_DEMULTI_FIRST" == "TRUE" ]; then
     for file in $( ls $output_known/*.merged.obi4.fastq.gz ); do
 
         #add new line character
-        echo "" | gzip - | cat - >> $$file
+        echo "" | gzip - | cat - >> "$file"
         #echo $file
         cat $file >> $merged_file
         sleep 1
@@ -570,7 +570,7 @@ if  [ "$FLAG_concat" == "Y"  ]; then
         fi
     fi 
 else 
-    step3_file=$merged_fil
+    step3_file=$merged_file
     step4_file=$merged_file
 fi
 ######################################################################################################################################
